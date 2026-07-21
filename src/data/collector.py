@@ -33,14 +33,6 @@ def get_headers() -> Dict[str, str]:
         "User-Agent": random.choice(USER_AGENTS),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
         "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive",
-        "Upgrade-Insecure-Requests": "1",
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "none",
-        "Sec-Fetch-User": "?1",
-        "Cache-Control": "max-age=0",
     }
 
 
@@ -75,18 +67,24 @@ def scrape_itviec(keyword: str = "python", max_pages: int = 5) -> List[Dict]:
                 url = f"{base_url}?q={quote_plus(keyword)}&page={page}"
 
             logger.info(f"[itviec] Crawling page {page}: {url}")
-            resp = requests.get(url, headers=get_headers(), timeout=15)
+            resp = requests.get(url, headers=get_headers(), timeout=15, verify=False)
             if resp.status_code != 200:
                 logger.warning(f"[itviec] Page {page} status {resp.status_code}")
                 break
 
             soup = BeautifulSoup(resp.text, "lxml")
 
-            # Find job cards
-            job_cards = soup.select("div.job-card, div.job-item, article.job-item, div[class*='job-item']")
+            # Verified: job cards are a.segment-job-card elements
+            job_cards = soup.select("a.segment-job-card")
             if not job_cards:
-                # Try alternative selectors
-                job_cards = soup.select("div.job-list > div, ul.job-list > li")
+                # Fallback: find any element with job link
+                result = soup.select_one("div.row.search-result, div[class*='search-result'], div.card-jobs-list")
+                if result:
+                    job_cards = result.find_all(["a", "div"], class_=lambda c: c and any(
+                        x in str(c).lower() for x in ["segment", "card", "job", "item"]
+                    ))
+            if not job_cards:
+                job_cards = soup.select("div.job-card, div.job-item, article, li.job-item, section, a[href*='viec-lam-it']")
 
             if not job_cards:
                 logger.warning(f"[itviec] No job cards found on page {page}")
@@ -116,38 +114,73 @@ def scrape_itviec(keyword: str = "python", max_pages: int = 5) -> List[Dict]:
 
 
 def parse_itviec_card(card: BeautifulSoup, keyword: str) -> Optional[Dict]:
-    """Parse một job card từ itviec."""
+    """Parse một job card từ itviec — text-based extraction."""
+    import re
     try:
-        # Title & URL
-        title_elem = card.select_one("h3.title a, h2.title a, a.job-title, a[class*='title']")
+        # Title
+        title_elem = card.select_one("h2 a, h3 a, a[href*='viec-lam-it'], a[class*='title'], a.job-title")
         if not title_elem:
-            return None
+            if card.name == 'a' and card.get('href'):
+                title_elem = card
+            else:
+                return None
 
         title = title_elem.get_text(strip=True)
+        if not title:
+            return None
         job_url = urljoin("https://itviec.com", title_elem.get("href", ""))
 
-        # Company
-        company_elem = card.select_one("a.company-name, span.company-name, div.company a, a[class*='company']")
-        company = company_elem.get_text(strip=True) if company_elem else "Unknown"
+        # Company — scan all visible text for company-like names
+        card_text = card.get_text()
+        lines = [l.strip() for l in card_text.split('\n') if l.strip()]
 
-        # Location
-        location_elem = card.select_one("span.location, div.location, i[class*='location'] + span, span[class*='location']")
-        location = location_elem.get_text(strip=True) if location_elem else ""
+        company = "Unknown"
+        # Skip title line and known labels
+        for line in lines:
+            if not line or line == title or any(kw in line.lower() for kw in ['trăng', 'triệu', 'salary', 'location', 'ngày', 'ngay', 'tag', 'skill']):
+                continue
+            if len(line) >= 3 and line.isascii():
+                company = line
+                break
+        # If company still unknown, try second line (itviec often puts company right after title)
+        if company == "Unknown" and len(lines) > 1:
+            company = lines[1]
 
-        # Salary
-        salary_elem = card.select_one("span.salary, div.salary, span[class*='salary']")
-        salary = salary_elem.get_text(strip=True) if salary_elem else ""
+        # Location & salary from text
+        location = ""
+        location_el = card.select_one("span[class*='location'], div[class*='location'], span[class*='address']")
+        if location_el:
+            location = location_el.get_text(strip=True)
+        if not location:
+            for line in lines:
+                if any(kw in line.lower() for kw in ['hcm', 'hanoi', 'da nang', 'hồ chí', 'hà nội', 'đà nẵng']):
+                    location = line
+                    break
+
+        salary = ""
+        salary_el = card.select_one("span[class*='salary'], div[class*='salary'], span[class*='Salary']")
+        if salary_el:
+            salary = salary_el.get_text(strip=True)
+        if not salary:
+            m = re.search(r'[\d,.]+\s*[-–to]+\s*[\d,.]+', card_text)
+            if m:
+                salary = m.group()
 
         # Skills/tags
-        skill_elems = card.select("span.tag, a.tag, div.tags span, span[class*='tag']")
+        skill_elems = card.select("span[class*='tag'], a[class*='tag'], div[class*='skill'] span, span[class*='Skill']")
         skills = [s.get_text(strip=True) for s in skill_elems if s.get_text(strip=True)]
+        if not skills:
+            # Tag list often in a div with small spans
+            for line in lines:
+                if line in ['Required', 'Nice to have'] or not line:
+                    continue
+                if len(line) < 20 and not any(kw in line for kw in ['triệu', 'Trăng', title, company]):
+                    skills.append(line)
 
-        # Posted date
-        date_elem = card.select_one("time, span.date, div.date, span[class*='date']")
+        date_elem = card.select_one("time, span[class*='date'], div[class*='date'], span[class*='Date']")
         posted_date = date_elem.get_text(strip=True) if date_elem else ""
 
-        # Description (may have remote info)
-        desc_elem = card.select_one("div.description, p.description, div[class*='description']")
+        desc_elem = card.select_one("div[class*='desc'], p[class*='desc'], div[class*='description']")
         description = desc_elem.get_text(strip=True) if desc_elem else ""
 
         job_id = generate_job_id("itviec", job_url)
@@ -174,34 +207,40 @@ def parse_itviec_card(card: BeautifulSoup, keyword: str) -> Optional[Dict]:
 # ============================================================
 # SCRAPER 2: VIETNAMWORKS.COM (General jobs - server-side)
 # ============================================================
-def scrape_vietnamworks(keyword: str = "it", max_pages: int = 5) -> List[Dict]:
+def scrape_vietnamworks(keyword: str = "python", max_pages: int = 5) -> List[Dict]:
     """Cào vietnamworks.com — đa ngành, server-side HTML.
 
-    URL: https://www.vietnamworks.com/viec-lam/{keyword}?page={page}
+    URL: https://www.vietnamworks.com/viec-lam?q={keyword}&page={page}
+    Hoặc: https://www.vietnamworks.com/tim-viec-lam?q={keyword}&page={page}
     """
     jobs = []
-    base_url = "https://www.vietnamworks.com/viec-lam"
 
     for page in range(1, max_pages + 1):
         try:
-            url = f"{base_url}/{quote_plus(keyword)}?page={page}"
-            logger.info(f"[vietnamworks] Crawling page {page}: {url}")
+            urls = [
+                f"https://www.vietnamworks.com/viec-lam?q={quote_plus(keyword)}&page={page}",
+                f"https://www.vietnamworks.com/tim-viec-lam?q={quote_plus(keyword)}&page={page}",
+            ]
+            resp = None
+            for url in urls:
+                try:
+                    logger.info(f"[vietnamworks] Trying: {url}")
+                    resp = requests.get(url, headers=get_headers(), timeout=15, verify=False)
+                    if resp.status_code == 200:
+                        break
+                except Exception:
+                    continue
 
-            resp = requests.get(url, headers=get_headers(), timeout=15)
-            if resp.status_code != 200:
-                logger.warning(f"[vietnamworks] Page {page} status {resp.status_code}")
+            if resp is None or resp.status_code != 200:
+                logger.warning(f"[vietnamworks] Page {page} all URLs failed")
                 break
 
             soup = BeautifulSoup(resp.text, "lxml")
 
-            # Job cards
-            job_cards = soup.select("div.job-card, div.job-item, article.job-card, div[class*='JobCard']")
+            # Job cards — broad selectors
+            job_cards = soup.select("div.job-card, div.job-item, article.job-card, div[class*='JobCard'], div[class*='job-card'], article[class*='job'], div[class*='card']")
             if not job_cards:
-                job_cards = soup.select("div.search-results > div, ul.job-list > li")
-
-            if not job_cards:
-                logger.warning(f"[vietnamworks] No job cards on page {page}")
-                break
+                job_cards = soup.select("div.search-results > div, ul.job-list > li, div[class*='result'] > div, div[class*='list'] > div")
 
             for card in job_cards:
                 try:
@@ -223,32 +262,42 @@ def scrape_vietnamworks(keyword: str = "it", max_pages: int = 5) -> List[Dict]:
 
 def parse_vietnamworks_card(card: BeautifulSoup) -> Optional[Dict]:
     try:
-        # Title & URL
-        title_elem = card.select_one("h3 a, h2 a, a.job-title, a[class*='title']")
+        title_elem = card.select_one("h3 a, h2 a, a.job-title, a[class*='title'], a[href*='viec-lam'], a[class*='job']")
         if not title_elem:
-            return None
+            if card.name == 'a' and card.get('href'):
+                title_elem = card
+            else:
+                return None
 
         title = title_elem.get_text(strip=True)
+        if not title:
+            return None
         job_url = urljoin("https://www.vietnamworks.com", title_elem.get("href", ""))
 
-        # Company
-        company_elem = card.select_one("a.company-name, span.company-name, div.company a")
-        company = company_elem.get_text(strip=True) if company_elem else "Unknown"
+        company = "Unknown"
+        company_elem = card.select_one("a.company-name, span.company-name, span[class*='company'], span[class*='Company']")
+        if company_elem:
+            company = company_elem.get_text(strip=True)
 
-        # Location
-        location_elem = card.select_one("span.location, div.location, span[class*='location']")
-        location = location_elem.get_text(strip=True) if location_elem else ""
+        location = ""
+        location_elem = card.select_one("span.location, div.location, span[class*='location'], span[class*='address']")
+        if location_elem:
+            location = location_elem.get_text(strip=True)
 
-        # Salary
+        salary = ""
         salary_elem = card.select_one("span.salary, div.salary, span[class*='salary']")
-        salary = salary_elem.get_text(strip=True) if salary_elem else ""
+        if salary_elem:
+            salary = salary_elem.get_text(strip=True)
+        if not salary:
+            import re
+            m = re.search(r'[\d,.]+\s*[-–to]+\s*[\d,.]+', card.get_text())
+            if m:
+                salary = m.group()
 
-        # Posted date
         date_elem = card.select_one("time, span.date, span[class*='date']")
         posted_date = date_elem.get_text(strip=True) if date_elem else ""
 
-        # Description (may have remote info)
-        desc_elem = card.select_one("div.description, p.description, div[class*='description']")
+        desc_elem = card.select_one("div.description, p.description, div[class*='description'], p[class*='desc']")
         description = desc_elem.get_text(strip=True) if desc_elem else ""
 
         job_id = generate_job_id("vietnamworks", job_url)
@@ -285,20 +334,32 @@ def scrape_topdev(keyword: str = "python", max_pages: int = 3) -> List[Dict]:
 
     for page in range(1, max_pages + 1):
         try:
-            url = f"{base_url}/{quote_plus(keyword)}?page={page}"
-            logger.info(f"[topdev] Crawling page {page}: {url}")
+            urls = [
+                f"{base_url}/{quote_plus(keyword)}?page={page}",
+                f"{base_url}/{quote_plus(keyword)}",
+            ]
+            resp = None
+            for url in urls:
+                try:
+                    logger.info(f"[topdev] Trying: {url}")
+                    resp = requests.get(url, headers=get_headers(), timeout=15, verify=False)
+                    if resp.status_code == 200:
+                        break
+                except Exception:
+                    continue
 
-            resp = requests.get(url, headers=get_headers(), timeout=15)
-            if resp.status_code != 200:
-                logger.warning(f"[topdev] Page {page} status {resp.status_code}")
+            if resp is None or resp.status_code != 200:
+                logger.warning(f"[topdev] Page {page} all URLs failed")
                 break
 
             soup = BeautifulSoup(resp.text, "lxml")
 
-            # Try to find job cards
-            job_cards = soup.select("div.job-item, div[class*='JobItem'], article.job, li.job-item")
+            # Try broad selectors
+            job_cards = soup.select("div.job-item, div[class*='JobItem'], article.job, li.job-item, a[class*='job'], div[class*='card']")
             if not job_cards:
-                # Try looking for JSON-LD or data attributes
+                job_cards = soup.select("div[class*='search'] > div, div[class*='list'] div[class*='item'], main div[class*='row'] > div[class*='col']")
+            # JSON-LD fallback
+            if not job_cards:
                 scripts = soup.find_all("script", type="application/ld+json")
                 for script in scripts:
                     try:
@@ -307,6 +368,8 @@ def scrape_topdev(keyword: str = "python", max_pages: int = 3) -> List[Dict]:
                             jobs.append(parse_topdev_json_ld(data))
                     except:
                         pass
+                if jobs:
+                    break  # Got data from JSON-LD, skip card parsing
 
             for card in job_cards:
                 try:
@@ -394,17 +457,30 @@ def parse_topdev_json_ld(data: Dict) -> Dict:
 def scrape_careerbuilder(keyword: str = "lap trinh", max_pages: int = 3) -> List[Dict]:
     """Cào careerbuilder.vn — fallback.
 
-    URL: https://careerbuilder.vn/viec-lam/{keyword}-trang-{page}.html
+    URL gốc: https://careerbuilder.vn/viec-lam/{keyword}-trang-{page}.html
+    CERT HET HAN (SSL error) — dang dung verify=False.
     """
+
     jobs = []
 
     for page in range(1, max_pages + 1):
         try:
-            url = f"https://careerbuilder.vn/viec-lam/{quote_plus(keyword)}-trang-{page}.html"
-            logger.info(f"[careerbuilder] Crawling page {page}: {url}")
+            # Thu 2 URL patterns khac nhau de tang ty le thanh cong
+            urls = [
+                f"https://careerbuilder.vn/viec-lam/{quote_plus(keyword)}-trang-{page}.html",
+                f"https://careerbuilder.vn/viec-lam/{quote_plus(keyword)}?page={page}",
+            ]
+            resp = None
+            for url in urls:
+                try:
+                    logger.info(f"[careerbuilder] Trying: {url}")
+                    resp = requests.get(url, headers=get_headers(), timeout=15, verify=False)
+                    if resp.status_code == 200:
+                        break
+                except Exception:
+                    continue
 
-            resp = requests.get(url, headers=get_headers(), timeout=15)
-            if resp.status_code != 200:
+            if resp is None or resp.status_code != 200:
                 logger.warning(f"[careerbuilder] Page {page} status {resp.status_code}")
                 break
 
@@ -669,17 +745,252 @@ def generate_fallback_data(n_jobs: int = 2000) -> Dict[str, List[Dict]]:
 
 
 # ============================================================
-# MAIN ORCHESTRATOR
+# SCRAPER 5: ITVIEC JSON-LD (trích job URLs từ page, crawl detail)
 # ============================================================
+def scrape_itviec_jsonld(keyword: str = "python", max_pages: int = 3) -> List[Dict]:
+    """Cào itviec JSON-LD — lấy danh sách job URLs từ schema.org ItemList."""
+    jobs = []
+    base_url = "https://itviec.com/viec-lam-it"
+
+    for page in range(1, max_pages + 1):
+        try:
+            url = f"{base_url}?q={quote_plus(keyword)}&page={page}"
+            logger.info(f"[itviec-jsonld] Crawling page {page}: {url}")
+            resp = requests.get(url, headers=get_headers(), timeout=15, verify=False)
+            if resp.status_code != 200:
+                break
+
+            soup = BeautifulSoup(resp.text, "lxml")
+            urls = []
+            for script in soup.find_all("script", type="application/ld+json"):
+                data = json.loads(script.string)
+                if isinstance(data, dict) and data.get("@type") == "ItemList":
+                    for item in data.get("itemListElement", []):
+                        u = item.get("url", "")
+                        if u:
+                            urls.append(u)
+            logger.info(f"[itviec-jsonld] Found {len(urls)} job URLs")
+
+            for job_url in urls:
+                try:
+                    job = parse_itviec_detail(job_url)
+                    if job:
+                        job["keyword"] = keyword
+                        jobs.append(job)
+                    polite_delay(0.5, 1.5)  # shorter delay for detail pages
+                except Exception as e:
+                    logger.warning(f"[itviec-jsonld] Parse detail error: {e}")
+                    continue
+
+            # Check next page
+            next_btn = soup.select_one("a[rel='next']")
+            if not next_btn:
+                break
+
+        except requests.RequestException as e:
+            logger.error(f"[itviec-jsonld] Request error: {e}")
+            break
+
+    logger.info(f"[itviec-jsonld] Total jobs: {len(jobs)}")
+    return jobs
+
+
+def parse_itviec_detail(job_url: str) -> Optional[Dict]:
+    """Parse chi tiết 1 job từ itviec detail page."""
+    import re as _re
+    try:
+        resp = requests.get(job_url, headers=get_headers(), timeout=25, verify=False)
+        if resp.status_code != 200:
+            logger.warning(f"[itviec-detail] {job_url[-40:]} status {resp.status_code}")
+            return None
+
+        # Extract JSON-LD via regex
+        data = None
+        marker = 'application/ld+json'
+        for m in _re.finditer(r'<script[^>]*type=(["\'])' + _re.escape(marker) + r'\1[^>]*>(.*?)</script>', resp.text, _re.DOTALL):
+            raw = m.group(2).strip()
+            try:
+                d = json.loads(raw)
+                if isinstance(d, dict) and d.get("@type") == "JobPosting":
+                    data = d
+                    break
+            except:
+                continue
+        if not data:
+            return None
+
+        title = data.get("title") or ""
+        if not title:
+            return None
+
+        company = "Unknown"
+        try:
+            org = data.get("hiringOrganization")
+            company = (org.get("name") or "Unknown") if isinstance(org, dict) else "Unknown"
+        except:
+            pass
+
+        location = ""
+        try:
+            loc = data.get("jobLocation")
+            # jobLocation can be a list of Place objects or a single dict
+            if isinstance(loc, list):
+                for place in loc:
+                    if isinstance(place, dict):
+                        addr = place.get("address", {})
+                        if isinstance(addr, dict):
+                            region = addr.get("addressRegion") or ""
+                            if region:
+                                location = region
+                                break
+            elif isinstance(loc, dict):
+                addr = loc.get("address")
+                if isinstance(addr, dict):
+                    location = addr.get("addressRegion") or addr.get("addressLocality") or ""
+        except:
+            pass
+
+        salary_raw = ""
+        try:
+            sal = data.get("baseSalary", {})
+            if isinstance(sal, dict):
+                v = sal.get("value", {})
+                if isinstance(v, dict):
+                    val = v.get("value")
+                    if isinstance(val, (int, float)):
+                        salary_raw = f"{val} {v.get('unitText','')}"
+        except:
+            pass
+
+        desc = data.get("description") or ""
+        skills_raw = extract_skills_from_text(desc) if desc else []
+        job_id = generate_job_id("itviec", job_url)
+
+        return {
+            "job_id": job_id,
+            "job_title": title,
+            "company_name": company,
+            "city": normalize_city(location),
+            "remote_option": extract_remote_option(location, desc),
+            "salary_raw": salary_raw,
+            "skills_raw": skills_raw,
+            "posted_date_raw": data.get("datePosted") or "",
+            "source_site": "itviec",
+            "source_url": job_url,
+            "description_raw": desc[:500] if desc else "",
+        }
+    except Exception as e:
+        logger.warning(f"[itviec-detail] Failed: {e}")
+        return None
+
+
+# ============================================================
+# SCRAPER 6: VIETNAMWORKS EMBEDDED (__NEXT_DATA__)
+# ============================================================
+def scrape_vietnamworks_embedded(keyword: str = "python", max_pages: int = 3) -> List[Dict]:
+    """Cào vietnamworks từ __NEXT_DATA__ embedded trong HTML."""
+    import re as _re
+    jobs = []
+
+    for page in range(max_pages):
+        try:
+            url = f"https://www.vietnamworks.com/viec-lam?q={quote_plus(keyword)}&page={page+1}"
+            logger.info(f"[vnworks-embed] Page {page+1}: {url}")
+            resp = requests.get(url, headers=get_headers(), timeout=15, verify=False)
+            if resp.status_code != 200:
+                break
+
+            m = _re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', resp.text, _re.DOTALL)
+            if not m:
+                break
+            data = json.loads(m.group(1))
+            pp = data.get("props", {}).get("pageProps", {})
+
+            # Try multiple job list keys
+            for job_list_key in ["outstandingJobs", "featuredJobs", "latestJobs"]:
+                job_list = pp.get(job_list_key, [])
+                if job_list:
+                    logger.info(f"[vnworks-embed] {len(job_list)} jobs in {job_list_key}")
+                    for hit in job_list:
+                        job = parse_vietnamworks_embedded_hit(hit)
+                        if job:
+                            jobs.append(job)
+                    break
+
+            polite_delay(0.5, 1)
+        except Exception as e:
+            logger.error(f"[vnworks-embed] Error: {e}")
+            break
+
+    logger.info(f"[vnworks-embed] Total jobs: {len(jobs)}")
+    return jobs
+
+
+def parse_vietnamworks_embedded_hit(hit: Dict) -> Optional[Dict]:
+    """Parse 1 hit từ Algolia response thành job dict."""
+    try:
+        job_id = generate_job_id("vietnamworks", hit.get("url", ""))
+
+        # Normalize salary fields
+        salary_min, salary_max = None, None
+        salary_raw = hit.get("salary", "") or ""
+        salary_str = str(salary_raw)
+        import re
+        nums = re.findall(r"(\d+[\.,]?\d*)", salary_str.replace(",", ""))
+        if len(nums) >= 2:
+            try:
+                salary_min = float(nums[0].replace(",", ""))
+                salary_max = float(nums[1].replace(",", ""))
+                if "$" in salary_str:
+                    salary_min *= 25
+                    salary_max *= 25
+            except:
+                pass
+
+        salary_hidden = "thương lượng" in salary_str.lower() or "negotiable" in salary_str.lower() or "cạnh tranh" in salary_str.lower()
+
+        skills_raw = []
+        if hit.get("skillTags"):
+            skills_raw = [s.get("key", "") for s in hit["skillTags"] if s.get("key")]
+        else:
+            skills_raw = extract_skills_from_text(hit.get("jobDescription", ""))
+
+        return {
+            "job_id": job_id,
+            "job_title": hit.get("jobTitle", "") or hit.get("title", ""),
+            "company_name": hit.get("company", {}).get("name", "") if isinstance(hit.get("company"), dict) else str(hit.get("company", "")),
+            "city": normalize_city(hit.get("location", "") or hit.get("city", "") or ""),
+            "experience_years": None,
+            "education_level": "Not specified",
+            "job_type": "Full-time",
+            "remote_option": extract_remote_option(hit.get("location", ""), ""),
+            "salary_min": salary_min,
+            "salary_max": salary_max,
+            "salary_hidden": salary_hidden,
+            "has_english": False,
+            "posted_at": hit.get("expiredDate", ""),
+            "source_site": "vietnamworks",
+            "source_url": hit.get("url", ""),
+            "skills_raw": skills_raw,
+            "description_raw": hit.get("jobDescription", "")[:500] if hit.get("jobDescription") else "",
+        }
+    except Exception as e:
+        logger.warning(f"[vnworks-algolia-hit] Parse failed: {e}")
+        return None
+
+
+# ============================================================
+# MAIN ORCHESTRATOR
 def run_all_scrapers(
     keywords: List[str] = None,
     max_pages_per_site: int = 5,
     min_total_jobs: int = 1000,
+    use_fallback: bool = True,
 ) -> Dict[str, List[Dict]]:
     """Chạy tất cả scrapers theo thứ tự ưu tiên.
 
     Trả về dict: jobs, skills, companies.
-    Nếu total < min_total_jobs -> chạy fallback cho phần thiếu.
+    Nếu total < min_total_jobs -> chạy fallback cho phần thiếu (nếu use_fallback=True).
     """
     if keywords is None:
         keywords = ["python", "java", "javascript", "react", "nodejs", "data", "devops", "mobile", "backend", "frontend"]
@@ -689,8 +1000,8 @@ def run_all_scrapers(
     all_companies = []
 
     scrapers = [
-        ("itviec", scrape_itviec),
-        ("vietnamworks", scrape_vietnamworks),
+        ("itviec", scrape_itviec_jsonld),
+        ("vietnamworks", scrape_vietnamworks_embedded),
         ("topdev", scrape_topdev),
         ("careerbuilder", scrape_careerbuilder),
     ]
@@ -715,14 +1026,17 @@ def run_all_scrapers(
 
     logger.info(f"Total unique jobs after dedup: {len(unique_jobs)}")
 
-    # If not enough, generate fallback
+    # If not enough, generate fallback (only if use_fallback=True)
     if len(unique_jobs) < min_total_jobs:
-        needed = min_total_jobs - len(unique_jobs)
-        logger.warning(f"Only {len(unique_jobs)} real jobs, generating {needed} fallback records")
-        fallback = generate_fallback_data(needed)
-        unique_jobs.extend(fallback["jobs"])
-        all_skills.extend(fallback["skills"])
-        all_companies.extend(fallback["companies"])
+        if use_fallback:
+            needed = min_total_jobs - len(unique_jobs)
+            logger.warning(f"Only {len(unique_jobs)} real jobs, generating {needed} fallback records")
+            fallback = generate_fallback_data(needed)
+            unique_jobs.extend(fallback["jobs"])
+            all_skills.extend(fallback["skills"])
+            all_companies.extend(fallback["companies"])
+        else:
+            logger.warning(f"Only {len(unique_jobs)} real jobs (fallback OFF) — returning partial data")
 
     # Extract skills from job descriptions (basic keyword matching)
     for job in unique_jobs:

@@ -2,8 +2,13 @@
 Streamlit scraper UI — crawl job data, view, and stats.
 """
 
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
 import streamlit as st
 import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 import logging
@@ -73,8 +78,34 @@ with st.sidebar:
         ["python", "java", "javascript", "react", "data", "devops"],
         default=["python", "java"],
     )
-    max_pages = st.slider("Max pages per site", 1, 5, 2)
+    max_pages = st.slider("Max pages per site", 1, 5, 1)
     min_jobs = st.slider("Min total jobs", 500, 5000, 1000, step=100)
+    use_fallback = st.checkbox("Auto-generate fallback data", value=True,
+                               help="If ON: generates synthetic data when real crawl is insufficient. "
+                                    "If OFF: returns only real crawled data (may be 0).")
+
+    st.divider()
+    st.caption("**Quick debug — test single site**")
+    col1, col2 = st.columns(2)
+    with col1:
+        test_kw = st.text_input("Keyword", value="python", key="test_kw")
+    with col2:
+        test_site = st.selectbox("Site", ["itviec", "vietnamworks", "topdev", "careerbuilder"], key="test_site")
+    if st.button("Test single site", type="secondary", use_container_width=True):
+        with st.spinner(f"Testing {test_site} with keyword '{test_kw}'..."):
+            import importlib
+            mod = __import__("src.data.collector", fromlist=["scrape_" + test_site])
+            scraper_fn = getattr(mod, "scrape_" + test_site)
+            try:
+                test_jobs = scraper_fn(keyword=test_kw, max_pages=1)
+                if test_jobs:
+                    st.success(f"✅ {test_site}: {len(test_jobs)} jobs scraped!")
+                    for j in test_jobs[:3]:
+                        st.write(f"- {j.get('job_title','?')} @ {j.get('company_name','?')}")
+                else:
+                    st.warning(f"❌ {test_site}: 0 jobs returned")
+            except Exception as e:
+                st.error(f"❌ {test_site}: {e}")
 
     dm = JobDataManager()
     st.caption(f"Data directory: `{dm.raw_dir}`")
@@ -113,6 +144,7 @@ with tab1:
                     keywords=keywords if keywords else None,
                     max_pages_per_site=max_pages,
                     min_total_jobs=min_jobs,
+                    use_fallback=use_fallback,
                 )
 
             n_jobs = len(results["jobs"])
@@ -125,13 +157,15 @@ with tab1:
             st.session_state.crawl_results = results
             st.session_state.crawl_complete = True
 
-            cols = st.columns(3)
+            cols = st.columns(4)
             cols[0].metric("Jobs", f"{n_jobs:,}")
             cols[1].metric("Skills", f"{n_skills:,}")
             cols[2].metric("Companies", f"{n_companies:,}")
+            real_count = n_jobs - fallback_count
+            cols[3].metric("Real (live)", f"{real_count:,}")
 
             if fallback_count > 0:
-                pct = 100.0 * fallback_count / n_jobs
+                pct = 100.0 * fallback_count / n_jobs if n_jobs else 0
                 st.warning(
                     f"**{fallback_count:,} / {n_jobs:,} jobs ({pct:.0f}%) are fallback "
                     "(simulated) data.** "
@@ -139,6 +173,13 @@ with tab1:
                 )
             else:
                 st.success("All data collected from live sites.")
+
+            # Source breakdown
+            src_counts = pd.Series([j.get("source_site","?") for j in results["jobs"]]).value_counts()
+            st.write("**Source breakdown:**")
+            for src, cnt in src_counts.items():
+                real_tag = " 🟢" if src != "fallback" else " 🔴 simulated"
+                st.write(f"- {src}: **{cnt}** jobs{real_tag}")
 
         except Exception as exc:
             st.error(f"Crawl failed: {exc}")
@@ -168,14 +209,17 @@ with tab2:
         # Filters
         cf1, cf2 = st.columns([1, 2])
         with cf1:
-            sources = ["All"] + sorted(jobs_df["source_site"].unique().tolist())
+            src_col = "source_site" if "source_site" in jobs_df.columns else "site"
+            if src_col not in jobs_df.columns:
+                jobs_df[src_col] = "unknown"
+            sources = ["All"] + sorted(jobs_df[src_col].unique().tolist())
             src_filter = st.selectbox("Source site", sources)
         with cf2:
             search_q = st.text_input("Search job title", placeholder="e.g. developer")
 
         df = jobs_df.copy()
         if src_filter != "All":
-            df = df[df["source_site"] == src_filter]
+            df = df[df[src_col] == src_filter]
         if search_q:
             df = df[df["job_title"].str.contains(search_q, case=False, na=False)]
 
@@ -187,7 +231,7 @@ with tab2:
                 "company_name",
                 "city",
                 "salary_raw",
-                "source_site",
+                src_col,
                 "remote_option",
             )
             if c in df.columns
@@ -213,7 +257,7 @@ with tab2:
                 with ca:
                     st.markdown(f"**Company:** {row['company_name']}")
                     st.markdown(f"**City:** {row.get('city', '—')}")
-                    st.markdown(f"**Source:** {row['source_site']}")
+                    st.markdown(f"**Source:** {row.get(src_col, '—')}")
                     st.markdown(f"**URL:** {row.get('source_url', '—')}")
                 with cb:
                     st.markdown(f"**Salary:** {row.get('salary_raw', '—')}")
@@ -262,7 +306,10 @@ with tab3:
 
         # --- City distribution ---
         st.subheader("City Distribution")
-        city_counts = jobs_df["city"].value_counts()
+        city_col = "city" if "city" in jobs_df.columns else "location"
+        if city_col not in jobs_df.columns:
+            jobs_df[city_col] = "Unknown"
+        city_counts = jobs_df[city_col].value_counts()
         if not city_counts.empty:
             fig, ax = plt.subplots(figsize=(8, 6))
             ax.pie(
@@ -279,7 +326,7 @@ with tab3:
 
         # --- Source distribution ---
         st.subheader("Source Distribution")
-        src_counts = jobs_df["source_site"].value_counts()
+        src_counts = jobs_df[src_col].value_counts()
         if not src_counts.empty:
             st.bar_chart(src_counts)
         else:
