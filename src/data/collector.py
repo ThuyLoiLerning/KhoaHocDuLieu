@@ -747,8 +747,9 @@ def generate_fallback_data(n_jobs: int = 2000) -> Dict[str, List[Dict]]:
 # ============================================================
 # SCRAPER 5: ITVIEC JSON-LD (trích job URLs từ page, crawl detail)
 # ============================================================
-def scrape_itviec_jsonld(keyword: str = "python", max_pages: int = 3) -> List[Dict]:
-    """Cào itviec JSON-LD — lấy danh sách job URLs từ schema.org ItemList."""
+def scrape_itviec_jsonld(keyword: str = "python", max_pages: int = 5) -> List[Dict]:
+    """Cào itviec JSON-LD — lấy danh sách job URLs từ schema.org ItemList.
+    Hỗ trợ đa trang (mỗi trang ~20 jobs)."""
     jobs = []
     base_url = "https://itviec.com/viec-lam-it"
 
@@ -761,15 +762,26 @@ def scrape_itviec_jsonld(keyword: str = "python", max_pages: int = 3) -> List[Di
                 break
 
             soup = BeautifulSoup(resp.text, "lxml")
-            urls = []
+            urls = set()
             for script in soup.find_all("script", type="application/ld+json"):
                 data = json.loads(script.string)
                 if isinstance(data, dict) and data.get("@type") == "ItemList":
                     for item in data.get("itemListElement", []):
                         u = item.get("url", "")
                         if u:
-                            urls.append(u)
-            logger.info(f"[itviec-jsonld] Found {len(urls)} job URLs")
+                            urls.add(u)
+
+            # Fallback: also extract URLs from HTML if JSON-LD empty
+            if not urls:
+                for a in soup.select("a[href*='/viec-lam-it/']"):
+                    h = a.get("href", "")
+                    if h and "/viec-lam-it/" in h and "click_source" not in h:
+                        full_url = urljoin(base_url, h)
+                        urls.add(full_url)
+
+            logger.info(f"[itviec-jsonld] Page {page}: {len(urls)} job URLs")
+            if not urls:
+                break
 
             for job_url in urls:
                 try:
@@ -777,10 +789,9 @@ def scrape_itviec_jsonld(keyword: str = "python", max_pages: int = 3) -> List[Di
                     if job:
                         job["keyword"] = keyword
                         jobs.append(job)
-                    polite_delay(0.5, 1.5)  # shorter delay for detail pages
+                    polite_delay(0.5, 1.5)
                 except Exception as e:
-                    logger.warning(f"[itviec-jsonld] Parse detail error: {e}")
-                    continue
+                    logger.warning(f"[itviec-jsonld] Parse error: {e}")
 
             # Check next page
             next_btn = soup.select_one("a[rel='next']")
@@ -791,7 +802,7 @@ def scrape_itviec_jsonld(keyword: str = "python", max_pages: int = 3) -> List[Di
             logger.error(f"[itviec-jsonld] Request error: {e}")
             break
 
-    logger.info(f"[itviec-jsonld] Total jobs: {len(jobs)}")
+    logger.info(f"[itviec-jsonld] Total: {len(jobs)} jobs (keyword='{keyword}')")
     return jobs
 
 
@@ -887,10 +898,12 @@ def parse_itviec_detail(job_url: str) -> Optional[Dict]:
 # ============================================================
 # SCRAPER 6: VIETNAMWORKS EMBEDDED (__NEXT_DATA__)
 # ============================================================
-def scrape_vietnamworks_embedded(keyword: str = "python", max_pages: int = 3) -> List[Dict]:
-    """Cào vietnamworks từ __NEXT_DATA__ embedded trong HTML."""
+def scrape_vietnamworks_embedded(keyword: str = "python", max_pages: int = 5) -> List[Dict]:
+    """Cào vietnamworks từ __NEXT_DATA__ embedded trong HTML.
+    Mỗi trang ~20 jobs (outstandingJobs + search results khi có)."""
     import re as _re
     jobs = []
+    seen_urls = set()
 
     for page in range(max_pages):
         try:
@@ -906,23 +919,30 @@ def scrape_vietnamworks_embedded(keyword: str = "python", max_pages: int = 3) ->
             data = json.loads(m.group(1))
             pp = data.get("props", {}).get("pageProps", {})
 
-            # Try multiple job list keys
+            hits = []
             for job_list_key in ["outstandingJobs", "featuredJobs", "latestJobs"]:
                 job_list = pp.get(job_list_key, [])
                 if job_list:
-                    logger.info(f"[vnworks-embed] {len(job_list)} jobs in {job_list_key}")
-                    for hit in job_list:
-                        job = parse_vietnamworks_embedded_hit(hit)
-                        if job:
-                            jobs.append(job)
+                    hits = job_list
+                    logger.info(f"[vnworks-embed] Page {page+1}: {len(hits)} from {job_list_key}")
                     break
+
+            # Dedup by URL
+            for hit in hits:
+                u = hit.get("url", "")
+                if u in seen_urls:
+                    continue
+                seen_urls.add(u)
+                job = parse_vietnamworks_embedded_hit(hit)
+                if job:
+                    jobs.append(job)
 
             polite_delay(0.5, 1)
         except Exception as e:
             logger.error(f"[vnworks-embed] Error: {e}")
             break
 
-    logger.info(f"[vnworks-embed] Total jobs: {len(jobs)}")
+    logger.info(f"[vnworks-embed] Total: {len(jobs)} jobs (keyword='{keyword}')")
     return jobs
 
 
@@ -984,7 +1004,7 @@ def parse_vietnamworks_embedded_hit(hit: Dict) -> Optional[Dict]:
 def run_all_scrapers(
     keywords: List[str] = None,
     max_pages_per_site: int = 5,
-    min_total_jobs: int = 1000,
+    min_total_jobs: int = 500,
     use_fallback: bool = True,
 ) -> Dict[str, List[Dict]]:
     """Chạy tất cả scrapers theo thứ tự ưu tiên.
@@ -993,7 +1013,7 @@ def run_all_scrapers(
     Nếu total < min_total_jobs -> chạy fallback cho phần thiếu (nếu use_fallback=True).
     """
     if keywords is None:
-        keywords = ["python", "java", "javascript", "react", "nodejs", "data", "devops", "mobile", "backend", "frontend"]
+        keywords = ["python", "java", "javascript", "react", "data", "devops", "nodejs", "frontend", "backend", "fullstack", "mobile", "tester", "cloud", "aws", "ai", "ml"]
 
     all_jobs = []
     all_skills = []
@@ -1006,9 +1026,12 @@ def run_all_scrapers(
         ("careerbuilder", scrape_careerbuilder),
     ]
 
+    # Use all keywords for itviec/vnworks, fewer for less reliable sites
+    keyword_limits = {"itviec": 5, "vietnamworks": 5, "topdev": 2, "careerbuilder": 1}
     for name, scraper_func in scrapers:
         logger.info(f"=== Starting scraper: {name} ===")
-        for kw in keywords[:3]:  # Limit keywords per site to avoid overload
+        limit = keyword_limits.get(name, 3)
+        for kw in keywords[:limit]:
             try:
                 jobs = scraper_func(keyword=kw, max_pages=max_pages_per_site)
                 all_jobs.extend(jobs)
