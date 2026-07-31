@@ -1,0 +1,50 @@
+[
+  {
+    "file": "apps/scraper_ui.py",
+    "line": 193,
+    "summary": "convert_results caller now discards companies_df with `_` — was `jobs_df, skills_df, companies_df = convert_results(...)` now `jobs_df, skills_df, _ = convert_results(...)`. companies_df was never used in tab 2 body, so no breakage.",
+    "failure_scenario": "None — safe discard of unused variable."
+  },
+  {
+    "file": "apps/scraper_ui.py",
+    "line": 23,
+    "summary": "convert_results removed type hints `results: Dict[str, Any]`, changed `results[\"skills\"]`/`results[\"companies\"]` to `.get(\"skills\", [])`/`.get(\"companies\", [])`. Old code would KeyError if keys missing; new code returns empty DataFrame. Strictly safer.",
+    "failure_scenario": "Missing `\"jobs\"` key still causes KeyError at line 24 (`results[\"jobs\"]`) — not changed to `.get()`. No caller ever passes a dict missing `\"jobs\"`, so not triggered."
+  },
+  {
+    "file": "apps/scraper_ui.py",
+    "line": 75,
+    "summary": "extract_salary deleted entirely. Grep over all .py files finds zero callers in the codebase. Safe removal.",
+    "failure_scenario": "No failure — function had no external dependents."
+  },
+  {
+    "file": "src/data/collector.py",
+    "line": 1540,
+    "summary": "run_all_scrapers accepts `progress_file: Optional[str] = None`. New UI code passes `progress_file=_pf` (line 125). Signature matches. Old callers in generate_data.py (no progress_file arg) continue to work via default None.",
+    "failure_scenario": "No failure — optional parameter, backward compatible."
+  },
+  {
+    "file": "src/config/scraper_config.py",
+    "line": 26,
+    "summary": "SITE_CONFIGS, METHOD_LABELS, and save_test_results all exist in module. Tab 3 imports (`from src.config.scraper_config import SITE_CONFIGS, METHOD_LABELS, save_test_results`) resolve correctly.",
+    "failure_scenario": "No failure — all symbols present and exported."
+  },
+  {
+    "file": "src/config/method_handlers.py",
+    "line": 35,
+    "summary": "jsonld_handler, next_data_handler, html_handler, api_handler all exist. Tab 3's MH mapping keys (`jsonld`, `next_data`, `html_cards`, `api_guest`) match the handler names and config method constants exactly.",
+    "failure_scenario": "No failure — all handlers defined and keys aligned."
+  },
+  {
+    "file": "apps/scraper_ui.py",
+    "line": 118,
+    "summary": "_run() thread function uses `results.get(\"jobs\",[])` and `.get()` for skills/companies — consistent with run_all_scrapers return dict. Except clause catches any missing-key edge case.",
+    "failure_scenario": "If run_all_scrapers returns a dict without 'jobs' key (possible only via unhandled exception path), except clause silently swallows and summary file is not written. Stale data read from summary file is benign."
+  },
+  {
+    "file": "apps/scraper_ui.py",
+    "line": 27,
+    "summary": "convert_results returns `(jobs, skills, companies)` where skills/companies could now be empty DataFrames via `.get()`. Old code would guarantee non-empty only if caller passed dict with non-empty lists. Single caller at line 193 handles empty DataFrames fine — downstream `.tolist()`, `.empty`, `.columns` checks work on empty DF.",
+    "failure_scenario": "No breakage — empty DataFrames are valid for all downstream operations in tab 2."
+  }
+]

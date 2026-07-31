@@ -21,20 +21,20 @@ class ExperienceResult:
 class ExperienceNormalizer:
     """Parse kinh nghiệm từ text: '2 năm', '3-5 năm', 'trên 5 năm', '5+ years', etc."""
 
-    # Regex patterns
+    # Regex patterns (hỗ trợ cả TV có dấu và không dấu)
     PATTERNS = [
-        # Range: "2-5 năm", "3 - 5 năm", "2–5 năm", "2 to 5 years"
-        (re.compile(r"(\d+(?:\.\d+)?)\s*[-–—]\s*(\d+(?:\.\d+)?)\s*(?:năm|year|yr)", re.IGNORECASE), "range"),
-        # From: "từ 3 năm", "from 3 years", "3+ năm", "3 năm trở lên"
-        (re.compile(r"(?:từ|from|min\s*)\s*(\d+(?:\.\d+)?)\s*(?:năm|year|yr|tuổi|\+)", re.IGNORECASE), "from"),
-        # Up to: "tới 5 năm", "đến 5 năm", "up to 5 years", "dưới 5 năm"
-        (re.compile(r"(?:tới|đến|up\s*to|max\s*|dưới|under)\s*(\d+(?:\.\d+)?)\s*(?:năm|year|yr)", re.IGNORECASE), "to"),
-        # Exact: "3 năm", "3 years", "5 yr", "10 năm kinh nghiệm"
-        (re.compile(r"(\d+(?:\.\d+)?)\s*(?:năm|year|yr|tuổi)(?:\s*kinh\s*nghiệm)?", re.IGNORECASE), "exact"),
-        # Vietnamese text: "hơn 5 năm", "trên 5 năm", "ít nhất 3 năm"
-        (re.compile(r"(?:hơn|trên|ít\s*nhất|at\s*least)\s*(\d+(?:\.\d+)?)\s*(?:năm|year)", re.IGNORECASE), "from"),
-        # Fresh/new grad
-        (re.compile(r"(?:fresher|new\s*grad|mới\s*ra\s*trường|chưa\s*có\s*kinh\s*nghiệm|no\s*experience|0\s*năm)", re.IGNORECASE), "zero"),
+        # Range: "2-5 năm/nam", "3 - 5 năm/nam", "2–5 năm/nam", "2 to 5 years"
+        (re.compile(r"(\d+(?:\.\d+)?)\s*[-–—]\s*(\d+(?:\.\d+)?)\s*(?:năm|nam|year|yr)", re.IGNORECASE), "range"),
+        # From: "từ/tu 3 năm/nam", "from 3 years", "3+ năm"
+        (re.compile(r"(?:từ|tu|from|min\s*)\s*(\d+(?:\.\d+)?)\s*(?:năm|nam|year|yr|tuổi|\+)", re.IGNORECASE), "from"),
+        # Up to: "tới/toi 5 năm/nam", "đến/den 5 năm", "up to 5 years", "dưới/duoi 5 nam"
+        (re.compile(r"(?:tới|toi|đến|den|up\s*to|max\s*|dưới|duoi|under)\s*(\d+(?:\.\d+)?)\s*(?:năm|nam|year|yr)", re.IGNORECASE), "to"),
+        # Exact: "3 năm", "2 nam", "3 years", "10 nam kinh nghiem"
+        (re.compile(r"(\d+(?:\.\d+)?)\s*(?:năm|nam|year|yr|tuổi)(?:\s*kinh\s*nghiệm|\s*kinh\s*nghiem)?", re.IGNORECASE), "exact"),
+        # Vietnamese: "hơn/hon 5 năm", "trên/tren 5 nam", "ít nhất/it nhat 3 nam"
+        (re.compile(r"(?:hơn|hon|trên|tren|ít\s*nhất|it\s*nhat|at\s*least)\s*(\d+(?:\.\d+)?)\s*(?:năm|nam|year)", re.IGNORECASE), "from"),
+        # Fresh/new grad + "moi ra truong"
+        (re.compile(r"(?:fresher|new\s*grad|mới\s*ra\s*trường|moi\s*ra\s*truong|chưa\s*có\s*kinh\s*nghiệm|chua\s*co\s*kinh\s*nghiem|no\s*experience|0\s*năm|0\s*nam)", re.IGNORECASE), "zero"),
     ]
 
     # Experience bins

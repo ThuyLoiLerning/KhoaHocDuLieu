@@ -44,7 +44,7 @@ class JobDataManager:
         raw_dir: str = "data/raw",
         processed_dir: str = "data/processed",
     ):
-        # Resolve relative paths from CWD; leave absolute paths as-is
+        # Resolve relative paths from CWD; absolute paths as-is
         raw_path = Path(raw_dir)
         self.raw_dir = raw_path.resolve() if not raw_path.is_absolute() else raw_path
         proc_path = Path(processed_dir)

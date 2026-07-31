@@ -43,12 +43,18 @@ class JobPosting:
     experience_years: Optional[float] = None
     education_level: str = "Not Required"
     job_type: str = "Full-time"
+    contract_type: str = "Not specified"     # 🆕 CDH/Temporary/Freelance
+    job_level: str = "Not specified"          # 🆕 Employee/Team Lead/Manager/Director
+    num_hiring: Optional[int] = None          # 🆕 số lượng cần tuyển
     remote_option: str = "On-site"
     salary_min: Optional[float] = None
     salary_max: Optional[float] = None
     salary_hidden: bool = False
     has_english: bool = False
+    working_hours: str = ""                   # 🆕 giờ làm việc
+    benefits: str = ""                        # 🆕 phúc lợi
     posted_at: Optional[datetime] = None
+    expired_at: Optional[datetime] = None     # 🆕 hạn nộp hồ sơ
     description: str = ""
     crawled_at: datetime = field(default_factory=datetime.now)
 
@@ -62,6 +68,10 @@ class JobPosting:
         self.remote_option = self._normalize_remote(self.remote_option)
         # Normalize job_type
         self.job_type = self._normalize_job_type(self.job_type)
+        # Normalize contract_type
+        self.contract_type = self._normalize_contract_type(self.contract_type)
+        # Normalize job_level
+        self.job_level = self._normalize_job_level(self.job_level)
         # Normalize education_level
         self.education_level = self._normalize_education(self.education_level)
 
@@ -73,6 +83,7 @@ class JobPosting:
             "tp.hcm": "HCMC", "thành phố hồ chí minh": "HCMC",
             "hanoi": "Hanoi", "hà nội": "Hanoi", "ha noi": "Hanoi",
             "da nang": "Da Nang", "đà nẵng": "Da Nang", "danang": "Da Nang",
+            "can tho": "Can Tho", "cần thơ": "Can Tho", "cantho": "Can Tho",
             "remote": "Remote", "tự do": "Remote", "online": "Remote"
         }
         return city_map.get(city_lower, city.title())
@@ -96,6 +107,38 @@ class JobPosting:
         if "intern" in jt or "thực tập" in jt:
             return "Internship"
         return "Full-time"
+
+    @staticmethod
+    def _normalize_contract_type(ct: str) -> str:
+        ct_lower = ct.lower().strip()
+        if any(kw in ct_lower for kw in ["cdh", "indefinite", "chính thức", "chinh thuc", "fulltime", "permanent"]):
+            return "CDH (Indefinite)"
+        if any(kw in ct_lower for kw in ["temporary", "tam thoi", "tạm thời", "thời vụ", "thoi vu", "seasonal"]):
+            return "Temporary"
+        if any(kw in ct_lower for kw in ["freelance", "tu do", "tự do", "contractor"]):
+            return "Freelance"
+        if any(kw in ct_lower for kw in ["intern", "internship", "thực tập", "thuc tap"]):
+            return "Internship"
+        if any(kw in ct_lower for kw in ["part", "parttime", "ban thoi gian", "bán thời gian"]):
+            return "Part-time"
+        return "Not specified"
+
+    @staticmethod
+    def _normalize_job_level(jl: str) -> str:
+        jl_lower = jl.lower().strip()
+        if any(kw in jl_lower for kw in ["director", "giam doc", "giám đốc", "vp", "vice president"]):
+            return "Director"
+        if any(kw in jl_lower for kw in ["manager", "quan ly", "quản lý", "truong phong", "trưởng phòng"]):
+            return "Manager"
+        if any(kw in jl_lower for kw in ["team lead", "team leader", "truong nhom", "trưởng nhóm", "lead"]):
+            return "Team Lead"
+        if any(kw in jl_lower for kw in ["senior", "sr", "expert", "chuyen vien", "chuyên viên"]):
+            return "Senior"
+        if any(kw in jl_lower for kw in ["junior", "jr", "fresher", "intern", "thuc tap", "thực tập"]):
+            return "Junior"
+        if any(kw in jl_lower for kw in ["employee", "nhan vien", "nhân viên", "staff"]):
+            return "Employee"
+        return "Not specified"
 
     @staticmethod
     def _normalize_education(edu: str) -> str:
@@ -134,13 +177,19 @@ class JobPosting:
             "experience_years": self.experience_years,
             "education_level": self.education_level,
             "job_type": self.job_type,
+            "contract_type": self.contract_type,
+            "job_level": self.job_level,
+            "num_hiring": self.num_hiring,
             "remote_option": self.remote_option,
             "salary_min": self.salary_min,
             "salary_max": self.salary_max,
             "salary_hidden": self.salary_hidden,
             "has_english": self.has_english,
             "salary_mid": self.salary_mid,
+            "working_hours": self.working_hours,
+            "benefits": self.benefits,
             "posted_at": self.posted_at.isoformat() if self.posted_at else None,
+            "expired_at": self.expired_at.isoformat() if self.expired_at else None,
             "description": self.description,
             "source_url": self.source_url,
             "source_site": self.source_site,
@@ -166,6 +215,13 @@ class JobPosting:
         elif crawled_at is None:
             crawled_at = datetime.now()
 
+        expired_at = data.get("expired_at")
+        if isinstance(expired_at, str):
+            try:
+                expired_at = datetime.fromisoformat(expired_at)
+            except:
+                expired_at = None
+
         return cls(
             job_id=data.get("job_id", ""),
             job_title=data.get("job_title", ""),
@@ -175,12 +231,18 @@ class JobPosting:
             experience_years=float(data["experience_years"]) if data.get("experience_years") else None,
             education_level=data.get("education_level", "Not Required"),
             job_type=data.get("job_type", "Full-time"),
+            contract_type=data.get("contract_type", "Not specified"),
+            job_level=data.get("job_level", "Not specified"),
+            num_hiring=data.get("num_hiring"),
             remote_option=data.get("remote_option", "On-site"),
             salary_min=float(data["salary_min"]) if data.get("salary_min") else None,
             salary_max=float(data["salary_max"]) if data.get("salary_max") else None,
             salary_hidden=data.get("salary_hidden", False),
             has_english=data.get("has_english", False),
             posted_at=posted_at,
+            expired_at=expired_at,
+            working_hours=data.get("working_hours", ""),
+            benefits=data.get("benefits", ""),
             description=data.get("description", ""),
             source_url=data.get("source_url", ""),
             source_site=data.get("source_site", ""),

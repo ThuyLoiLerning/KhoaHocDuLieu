@@ -1,0 +1,50 @@
+[
+  {
+    "file": "d:\\LerningSpace\\HocCaoHoc\\KhoaHocDuLieu\\apps\\scraper_ui.py",
+    "line": 146,
+    "summary": "st.session_state mutated from background thread — undefined behavior in Streamlit",
+    "failure_scenario": "User starts crawl; thread writes st.session_state.crawl_log and st.session_state.crawling=False on completion. Streamlit single-threaded architecture reads stale or partially-updated session state, causing UI corruption, crashes, or silent data loss."
+  },
+  {
+    "file": "d:\\LerningSpace\\HocCaoHoc\\KhoaHocDuLieu\\apps\\scraper_ui.py",
+    "line": 141,
+    "summary": "except Exception as exc: pass silently discards all crawl errors",
+    "failure_scenario": "Crawl raises any exception (network timeout, parsing error, file permission). The exception object is captured but ignored; user sees no error feedback. Crawl appears to complete but produces no results."
+  },
+  {
+    "file": "d:\\LerningSpace\\HocCaoHoc\\KhoaHocDuLieu\\apps\\scraper_ui.py",
+    "line": 35,
+    "summary": "bare except: swallows BaseException (KeyboardInterrupt, SystemExit) in helper reads",
+    "failure_scenario": "User presses Ctrl+C during crawl; KeyboardInterrupt caught by bare except on _read_progress, _read_log, _read_summary, or parquet restore. Program fails to terminate promptly."
+  },
+  {
+    "file": "d:\\LerningSpace\\HocCaoHoc\\KhoaHocDuLieu\\apps\\scraper_ui.py",
+    "line": 209,
+    "summary": "str.contains defaults to regex=True — user input metacharacters cause regex errors",
+    "failure_scenario": "User searches for 'C++', 'C#', or 'R (programming)'. The +, #, and ( are regex metacharacters. Pandas raises re.error or silently matches unintended patterns, forcing user to escape input manually."
+  },
+  {
+    "file": "d:\\LerningSpace\\HocCaoHoc\\KhoaHocDuLieu\\apps\\scraper_ui.py",
+    "line": 217,
+    "summary": "duplicate job titles in selectbox — iloc[0] always selects first duplicate",
+    "failure_scenario": "Two jobs with title 'Software Engineer' exist. User selects the second one from dropdown. Filter returns both rows, iloc[0] always picks the first. User views and exports wrong record."
+  },
+  {
+    "file": "d:\\LerningSpace\\HocCaoHoc\\KhoaHocDuLieu\\apps\\scraper_ui.py",
+    "line": 183,
+    "summary": "relative path data/processed/ depends on runtime working directory",
+    "failure_scenario": "App launched from outside project root (e.g., streamlit run some/other/path). os.listdir('data/processed') raises FileNotFoundError; caught by bare except on line 187, silently shows no data."
+  },
+  {
+    "file": "d:\\LerningSpace\\HocCaoHoc\\KhoaHocDuLieu\\apps\\scraper_ui.py",
+    "line": 246,
+    "summary": "SITE_CONFIGS list comprehension assumes non-empty, well-formed entries",
+    "failure_scenario": "If SITE_CONFIGS is empty, site_names = []. selectbox on line 247 with empty options crashes Streamlit. If any config dict lacks 'name' key, KeyError propagates unhandled."
+  },
+  {
+    "file": "d:\\LerningSpace\\HocCaoHoc\\KhoaHocDuLieu\\apps\\scraper_ui.py",
+    "line": 108,
+    "summary": "open('w').close() relies on CPython ref-counting for file descriptor cleanup",
+    "failure_scenario": "On PyPy or alternate Python implementations, file handle may not be reclaimed immediately. On CPython it works but is fragile; a with-block is the standard pattern."
+  }
+]

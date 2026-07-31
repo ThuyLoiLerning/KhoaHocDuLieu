@@ -11,7 +11,7 @@ logging.getLogger("src.cleaning.skill_normalizer").setLevel(logging.WARNING)
 logging.getLogger("src.cleaning.experience_normalizer").setLevel(logging.WARNING)
 logging.getLogger("src.cleaning.deduplicator").setLevel(logging.WARNING)
 
-from src.data.collector import run_all_scrapers
+from src.data.collector import run_all_scrapers, run_real_scrapers
 from src.data.data_manager import JobDataManager
 from src.data.salary_parser import SalaryParser
 from src.domain.job_posting import JobPosting
@@ -25,13 +25,23 @@ import pandas as pd
 import numpy as np
 
 print("=" * 60)
-print("STEP 1: Running scrapers (will fallback if sites block)")
+print("STEP 1: Running scrapers — REAL DATA (no fallback)")
 print("=" * 60)
 
-result = run_all_scrapers(
-    keywords=["python", "java", "javascript", "react", "data", "devops"],
-    max_pages_per_site=2,
-    min_total_jobs=1500,
+result = run_real_scrapers(
+    keywords=[
+        "python", "java", "javascript", "typescript", "react", "angular", "vue",
+        "nodejs", "frontend", "backend", "fullstack", "mobile", "android", "ios",
+        "flutter", "php", "ruby", "golang", "rust", "swift", "kotlin",
+        "data", "data engineer", "data analyst", "data scientist", "machine learning",
+        "ai", "devops", "cloud", "aws", "docker", "kubernetes",
+        "tester", "qa",
+        "product manager", "project manager", "tech lead",
+        "IT phan mem", "CNTT Phan mem", "lap trinh vien",
+    ],
+    max_pages_per_site=-1,  # crawl ALL pages
+    min_total_jobs=1200,
+    use_fallback=False,     # NO fallback!
 )
 
 print(f"Jobs: {len(result['jobs'])}")
@@ -186,7 +196,8 @@ city_fix = {"hcmc": "HCMC", "hanoi": "Hanoi", "da nang": "Da Nang",
 jobs_df["city"] = jobs_df["city"].str.strip().str.lower().map(
     lambda x: city_fix.get(x, x.title()) if pd.notna(x) else x
 )
-print(f"  City values: {jobs_df['city'].value_counts().to_dict()}")
+city_counts = jobs_df['city'].value_counts().to_dict()
+print(f"  City values: {str(city_counts).encode('ascii', errors='replace').decode()}")
 
 print("\n" + "=" * 60)
 print("STEP 7: Normalize skills")
@@ -222,6 +233,27 @@ if "experience_years" in jobs_df.columns:
         return exp_normalizer.parse_years(str(val)).years
 
     jobs_df["experience_years_parsed"] = jobs_df["experience_years"].apply(parse_exp)
+
+    # Infer experience from job title for rows missing experience
+    missing_exp = jobs_df["experience_years_parsed"].isna()
+    if missing_exp.any() and "job_title" in jobs_df.columns:
+        title_lower = jobs_df.loc[missing_exp, "job_title"].str.lower().fillna("")
+        level_map = {
+            "intern": 0.5, "thuc tap": 0.5, "fresh": 0.5,
+            "junior": 1.5, "jr": 1.5, "associate": 2.0,
+            "middle": 3.5, "mid": 3.5,
+            "senior": 6.0, "sr": 6.0, "expert": 6.0,
+            "lead": 7.0, "principal": 8.0,
+            "manager": 6.0, "head": 8.0, "director": 10.0,
+            "architect": 9.0, "cto": 12.0,
+        }
+        for keyword, years in level_map.items():
+            match = title_lower.str.contains(keyword, na=False, regex=False)
+            if match.any():
+                mask = missing_exp & match
+                jobs_df.loc[mask, "experience_years_parsed"] = years
+                missing_exp = jobs_df["experience_years_parsed"].isna()
+
     jobs_df["experience_bin"] = jobs_df["experience_years_parsed"].apply(
         lambda x: exp_normalizer.bin_experience(x) if pd.notna(x) else "Not specified"
     )

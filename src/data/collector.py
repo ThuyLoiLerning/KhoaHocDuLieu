@@ -16,6 +16,9 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from urllib.parse import urljoin, urlparse, quote_plus
 import logging
+import warnings
+warnings.filterwarnings("ignore", message="Unverified HTTPS request")
+warnings.filterwarnings("ignore", category=Warning)
 
 logger = logging.getLogger(__name__)
 
@@ -452,60 +455,76 @@ def parse_topdev_json_ld(data: Dict) -> Dict:
 
 
 # ============================================================
-# SCRAPER 4: CAREERBUILDER.VN (Fallback - đa ngành)
+# SCRAPER 4: CAREERVIET.VN (successor of careerbuilder)
 # ============================================================
-def scrape_careerbuilder(keyword: str = "lap trinh", max_pages: int = 3) -> List[Dict]:
-    """Cào careerbuilder.vn — fallback.
-
-    URL gốc: https://careerbuilder.vn/viec-lam/{keyword}-trang-{page}.html
-    CERT HET HAN (SSL error) — dang dung verify=False.
+def scrape_careerbuilder(keyword: str = "IT phan mem", max_pages: int = 3) -> List[Dict]:
+    """Cào careerviet.vn — IT jobs (careerbuilder.vn redirected to careerviet.vn).
+    Tu khoa: 'CNTT-Phan cung - mang', 'CNTT Phan mem', 'IT', 'lap trinh'.
     """
-
+    import re as _re
     jobs = []
 
     for page in range(1, max_pages + 1):
         try:
-            # Thu 2 URL patterns khac nhau de tang ty le thanh cong
             urls = [
-                f"https://careerbuilder.vn/viec-lam/{quote_plus(keyword)}-trang-{page}.html",
-                f"https://careerbuilder.vn/viec-lam/{quote_plus(keyword)}?page={page}",
+                f"https://careerviet.vn/viec-lam/tim-kiem?q={quote_plus(keyword)}&page={page}",
+                f"https://www.careerviet.vn/viec-lam/tim-kiem?q={quote_plus(keyword)}&page={page}",
             ]
             resp = None
             for url in urls:
                 try:
-                    logger.info(f"[careerbuilder] Trying: {url}")
+                    logger.info(f"[careerviet] Trying: {url}")
                     resp = requests.get(url, headers=get_headers(), timeout=15, verify=False)
-                    if resp.status_code == 200:
+                    if resp.status_code == 200 and len(resp.text) > 1000:
                         break
                 except Exception:
                     continue
 
             if resp is None or resp.status_code != 200:
-                logger.warning(f"[careerbuilder] Page {page} status {resp.status_code}")
-                break
+                continue
 
             soup = BeautifulSoup(resp.text, "lxml")
 
-            job_cards = soup.select("div.job-item, div.job-card, article.job-item, li.job-item")
+            # Try __NEXT_DATA__
+            hits = []
+            m = _re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', resp.text, _re.DOTALL)
+            if m:
+                data = json.loads(m.group(1))
+                pp = data.get("props", {}).get("pageProps", {})
+                for key in pp:
+                    val = pp[key]
+                    if isinstance(val, list) and len(val) > 0 and isinstance(val[0], dict):
+                        if any(k in val[0] for k in ["title", "jobTitle", "company"]):
+                            hits = val
+                            break
+                if hits:
+                    logger.info(f"[careerviet] {len(hits)} jobs from __NEXT_DATA__")
+                    for hit in hits:
+                        job = parse_careerviet_hit(hit)
+                        if job:
+                            job["source_site"] = "careerviet"
+                            jobs.append(job)
+                    continue
+
+            # HTML fallback
+            job_cards = soup.select("div.job-item, div.job-card, article.job-item, li.job-item, div[class*='job']")
             if not job_cards:
-                logger.warning(f"[careerbuilder] No job cards on page {page}")
-                break
+                continue
 
             for card in job_cards:
                 try:
                     job = parse_careerbuilder_card(card)
                     if job:
+                        job["source_site"] = "careerviet"
                         jobs.append(job)
                 except Exception as e:
-                    logger.warning(f"[careerbuilder] Parse error: {e}")
-
+                    pass
             polite_delay()
-
         except requests.RequestException as e:
-            logger.error(f"[careerbuilder] Request error page {page}: {e}")
-            break
+            logger.error(f"[careerviet] Error: {e}")
+            continue
 
-    logger.info(f"[careerbuilder] Total jobs scraped: {len(jobs)}")
+    logger.info(f"[careerviet] Total: {len(jobs)} jobs")
     return jobs
 
 
@@ -762,6 +781,7 @@ def scrape_itviec_jsonld(keyword: str = "python", max_pages: int = 5) -> List[Di
                 break
 
             soup = BeautifulSoup(resp.text, "lxml")
+            logger.info(f"[itviec-jsonld] Page {page}: parsing JSON-LD...")
             urls = set()
             for script in soup.find_all("script", type="application/ld+json"):
                 data = json.loads(script.string)
@@ -789,7 +809,7 @@ def scrape_itviec_jsonld(keyword: str = "python", max_pages: int = 5) -> List[Di
                     if job:
                         job["keyword"] = keyword
                         jobs.append(job)
-                    polite_delay(0.5, 1.5)
+                    polite_delay(1.0, 2.5)
                 except Exception as e:
                     logger.warning(f"[itviec-jsonld] Parse error: {e}")
 
@@ -988,7 +1008,7 @@ def parse_vietnamworks_embedded_hit(hit: Dict) -> Optional[Dict]:
             "salary_max": salary_max,
             "salary_hidden": salary_hidden,
             "has_english": False,
-            "posted_at": hit.get("expiredDate", ""),
+            "posted_at": datetime.fromtimestamp(hit.get("expiredDate", 0)).isoformat() if isinstance(hit.get("expiredDate"), (int, float)) and hit.get("expiredDate") else "",
             "source_site": "vietnamworks",
             "source_url": hit.get("url", ""),
             "skills_raw": skills_raw,
@@ -1000,18 +1020,550 @@ def parse_vietnamworks_embedded_hit(hit: Dict) -> Optional[Dict]:
 
 
 # ============================================================
+# SCRAPER 7: LINKEDIN GUEST API (khong can login)
+# ============================================================
+def scrape_linkedin_guest(keyword: str = "python", max_pages: int = 5) -> List[Dict]:
+    """Cao LinkedIn qua guest API — khong can login, khong vuot CAPTCHA.
+
+    Dung guest search API: /jobs-guest/jobs/api/seeMoreJobPostings/search
+    """
+    import re as _re
+    jobs = []
+    base_url = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+
+    for start in range(0, max_pages * 10, 10):
+        try:
+            url = f"{base_url}?keywords={quote_plus(keyword)}&location=Vietnam&start={start}"
+            logger.info(f"[linkedin] Start={start}: {url}")
+            resp = requests.get(url, headers=get_headers(), timeout=15, verify=False)
+            if resp.status_code != 200:
+                break
+
+            soup = BeautifulSoup(resp.text, "lxml")
+            cards = soup.select("div.base-card, div[class*='base-card'], div[class*='job-search-card'], li[class*='job']")
+            if not cards:
+                break
+
+            for card in cards:
+                try:
+                    job = parse_linkedin_card(card, keyword)
+                    if job:
+                        jobs.append(job)
+                except Exception as e:
+                    logger.warning(f"[linkedin] Parse error: {e}")
+
+            polite_delay(1.0, 2.0)
+        except requests.RequestException as e:
+            logger.error(f"[linkedin] Request error: {e}")
+            break
+
+    logger.info(f"[linkedin] Total: {len(jobs)} jobs (keyword='{keyword}')")
+    return jobs
+
+
+def parse_linkedin_card(card: BeautifulSoup, keyword: str) -> Optional[Dict]:
+    """Parse 1 job card tu LinkedIn guest API response."""
+    import re as _re
+    try:
+        title_el = card.select_one("a.base-card__full-link, a[class*='full-link'], a[data-tracking-control-name]")
+        if not title_el:
+            return None
+
+        title = title_el.get_text(strip=True)
+        if not title:
+            return None
+
+        job_url = title_el.get("href", "")
+        if job_url and not job_url.startswith("http"):
+            job_url = "https://www.linkedin.com" + job_url
+
+        company_el = card.select_one("h4.base-card__subtitle, h4[class*='subtitle'], a[class*='subtitle']")
+        company = company_el.get_text(strip=True) if company_el else "Unknown"
+
+        location_el = card.select_one("span.job-search-card__location, span[class*='location']")
+        location = location_el.get_text(strip=True) if location_el else ""
+
+        date_el = card.select_one("time, span[class*='date'], span[class*='posted-time']")
+        posted_date = date_el.get_text(strip=True) if date_el else ""
+
+        salary_raw = ""
+        salary_el = card.select_one("span[class*='salary'], div[class*='salary']")
+        if salary_el:
+            salary_raw = salary_el.get_text(strip=True)
+        if not salary_raw:
+            m = _re.search(r'[\d,.]+[\s-]+[\d,.]+', card.get_text())
+            if m:
+                salary_raw = m.group()
+
+        job_id = generate_job_id("linkedin", job_url)
+
+        return {
+            "job_id": job_id,
+            "job_title": title,
+            "company_name": company,
+            "city": normalize_city(location),
+            "experience_years": None,
+            "education_level": "Not specified",
+            "job_type": "Full-time",
+            "remote_option": extract_remote_option(location, ""),
+            "salary_min": None,
+            "salary_max": None,
+            "salary_hidden": False,
+            "has_english": False,
+            "posted_at": posted_date,
+            "source_site": "linkedin",
+            "source_url": job_url,
+            "skills_raw": [],
+            "description_raw": "",
+        }
+    except Exception as e:
+        logger.warning(f"[linkedin-card] Parse failed: {e}")
+        return None
+
+
+# ============================================================
+# SCRAPER 8: VIECLAM24H (Next.js __NEXT_DATA__)
+# ============================================================
+def scrape_vieclam24h(keyword: str = "IT phan mem", max_pages: int = 3) -> List[Dict]:
+    """Cao vieclam24h.vn tu __NEXT_DATA__ embedded JSON.
+    Tu khoa phu hop: 'IT phan mem', 'IT phan cung - mang', 'lap trinh', 'cong nghe thong tin'."""
+    import re as _re
+    jobs = []
+    for page in range(max_pages):
+        try:
+            url = f"https://vieclam24h.vn/tim-kiem-viec-lam?q={quote_plus(keyword)}&page={page+1}"
+            logger.info(f"[vieclam24h] Page {page+1}: {url}")
+            resp = requests.get(url, headers=get_headers(), timeout=15, verify=False)
+            if resp.status_code != 200:
+                break
+
+            m = _re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', resp.text, _re.DOTALL)
+            if not m:
+                break
+            data = json.loads(m.group(1))
+
+            # Data is in props.initialState.api.getSeoDynamicLanding.data
+            dd = data
+            for p in ["props", "initialState", "api", "getSeoDynamicLanding", "data"]:
+                if isinstance(dd, dict):
+                    dd = dd.get(p, {})
+                else:
+                    dd = {}
+                    break
+            hits = dd if isinstance(dd, list) else []
+
+            if not hits:
+                # Fallback: check props.pageProps
+                pp = data.get("props", {}).get("pageProps", {})
+                for key in pp:
+                    val = pp[key]
+                    if isinstance(val, list) and len(val) > 0 and isinstance(val[0], dict):
+                        if any(k in val[0] for k in ["title", "jobTitle", "company"]):
+                            hits = val
+                            break
+            if not hits:
+                break
+
+            logger.info(f"[vieclam24h] Page {page+1}: {len(hits)} jobs")
+            for hit in hits:
+                job = parse_vieclam24h_hit(hit)
+                if job:
+                    jobs.append(job)
+            polite_delay(0.5, 1.0)
+        except Exception as e:
+            logger.error(f"[vieclam24h] Error: {e}")
+            break
+    logger.info(f"[vieclam24h] Total: {len(jobs)} jobs")
+    return jobs
+
+
+def parse_vieclam24h_hit(hit: dict) -> Optional[Dict]:
+    try:
+        title = hit.get("title") or hit.get("jobTitle") or hit.get("name") or ""
+        if not title:
+            return None
+        company = hit.get("company") or hit.get("company_name") or hit.get("employer") or ""
+        if isinstance(company, dict):
+            company = company.get("name", "")
+        location = hit.get("location") or hit.get("city") or hit.get("address") or ""
+        salary = hit.get("salary") or hit.get("salary_raw") or ""
+        url = hit.get("url") or hit.get("link") or hit.get("slug") or ""
+        if url and not url.startswith("http"):
+            url = "https://vieclam24h.vn" + url
+        skills = hit.get("skills") or hit.get("tags") or []
+        if isinstance(skills, str):
+            skills = [skills]
+        job_id = generate_job_id("vieclam24h", url or title)
+        return {
+            "job_id": job_id,
+            "job_title": title,
+            "company_name": company if company else "Unknown",
+            "city": normalize_city(location),
+            "salary_raw": str(salary),
+            "skills_raw": skills,
+            "experience_years": None,
+            "education_level": "Not specified",
+            "job_type": "Full-time",
+            "remote_option": extract_remote_option(location, ""),
+            "has_english": False,
+            "posted_at": hit.get("posted_at") or hit.get("created_at") or "",
+            "source_site": "vieclam24h",
+            "source_url": url,
+            "description_raw": str(hit.get("description") or "")[:500],
+        }
+    except Exception as e:
+        logger.warning(f"[vieclam24h-parse] {e}")
+        return None
+
+
+# ============================================================
+# SCRAPER 9: TIMVIECNHANH (Next.js __NEXT_DATA__)
+# ============================================================
+def scrape_timviecnhanh(keyword: str = "python", max_pages: int = 3) -> List[Dict]:
+    """Cao timviecnhanh.com tu __NEXT_DATA__."""
+    import re as _re
+    jobs = []
+    for page in range(max_pages):
+        try:
+            url = f"https://www.timviecnhanh.com/tim-kiem?q={quote_plus(keyword)}&page={page+1}"
+            logger.info(f"[timviecnhanh] Page {page+1}: {url}")
+            resp = requests.get(url, headers=get_headers(), timeout=15, verify=False)
+            if resp.status_code != 200:
+                break
+            m = _re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', resp.text, _re.DOTALL)
+            if not m:
+                break
+            data = json.loads(m.group(1))
+            pp = data.get("props", {}).get("pageProps", {})
+            hits = []
+            for key in pp:
+                val = pp[key]
+                if isinstance(val, list) and len(val) > 0 and isinstance(val[0], dict):
+                    sample = val[0]
+                    if any(k in sample for k in ["title", "jobTitle", "job_title", "company", "salary"]):
+                        hits = val
+                        break
+            if not hits:
+                break
+            logger.info(f"[timviecnhanh] Page {page+1}: {len(hits)} jobs")
+            for hit in hits:
+                job = parse_timviecnhanh_hit(hit)
+                if job:
+                    jobs.append(job)
+            polite_delay(0.5, 1.0)
+        except Exception as e:
+            logger.error(f"[timviecnhanh] Error: {e}")
+            break
+    logger.info(f"[timviecnhanh] Total: {len(jobs)} jobs")
+    return jobs
+
+
+def parse_timviecnhanh_hit(hit: dict) -> Optional[Dict]:
+    try:
+        title = hit.get("title") or hit.get("jobTitle") or hit.get("name") or ""
+        if not title:
+            return None
+        company = hit.get("company") or hit.get("company_name") or hit.get("employer") or ""
+        if isinstance(company, dict):
+            company = company.get("name", "")
+        location = hit.get("location") or hit.get("city") or hit.get("address") or ""
+        salary = hit.get("salary") or hit.get("salary_raw") or ""
+        url = hit.get("url") or hit.get("link") or hit.get("slug") or ""
+        if url and not url.startswith("http"):
+            url = "https://www.timviecnhanh.com" + url
+        skills = hit.get("skills") or hit.get("tags") or []
+        if isinstance(skills, str):
+            skills = [skills]
+        job_id = generate_job_id("timviecnhanh", url or title)
+        return {
+            "job_id": job_id,
+            "job_title": title,
+            "company_name": company if company else "Unknown",
+            "city": normalize_city(location),
+            "salary_raw": str(salary),
+            "skills_raw": skills,
+            "experience_years": None,
+            "education_level": "Not specified",
+            "job_type": "Full-time",
+            "remote_option": extract_remote_option(location, ""),
+            "has_english": False,
+            "posted_at": hit.get("posted_at") or hit.get("created_at") or "",
+            "source_site": "timviecnhanh",
+            "source_url": url,
+            "description_raw": str(hit.get("description") or "")[:500],
+        }
+    except Exception as e:
+        logger.warning(f"[timviecnhanh-parse] {e}")
+        return None
+
+
+# ============================================================
+# SCRAPER 10: GLINTS (via __NEXT_DATA__)
+# ============================================================
+def scrape_glints(keyword: str = "Software Developer", max_pages: int = 3) -> List[Dict]:
+    """Cao glints.com/vn tu __NEXT_DATA__.
+    Tu khoa: 'Software Developer', 'Data Analyst', 'Frontend Developer'..."""
+    import re as _re
+    jobs = []
+    for start in range(0, max_pages * 12, 12):
+        try:
+            url = f"https://glints.com/vn/opportunities/jobs?keyword={quote_plus(keyword)}&page={start//12 + 1}"
+            logger.info(f"[glints] Page {start//12 + 1}: {url}")
+            resp = requests.get(url, headers=get_headers(), timeout=15, verify=False)
+            if resp.status_code != 200:
+                if 'cf_chl' in resp.text[:3000].lower():
+                    logger.warning("[glints] Cloudflare block")
+                    return jobs
+                break
+            m = _re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', resp.text, _re.DOTALL)
+            if not m:
+                break
+            data = json.loads(m.group(1))
+            pp = data.get("props", {}).get("pageProps", {})
+            hits = []
+            for key in pp:
+                val = pp[key]
+                if isinstance(val, list) and len(val) > 0 and isinstance(val[0], dict):
+                    if any(k in val[0] for k in ["title", "jobTitle", "name"]):
+                        hits = val
+                        break
+                elif isinstance(val, dict):
+                    for k2 in val:
+                        v2 = val[k2]
+                        if isinstance(v2, list) and len(v2) > 0 and isinstance(v2[0], dict):
+                            if any(k in v2[0] for k in ["title", "jobTitle", "name"]):
+                                hits = v2
+                                break
+                    if hits:
+                        break
+            if not hits:
+                break
+            logger.info(f"[glints] {len(hits)} jobs")
+            for hit in hits:
+                job = parse_glints_hit(hit)
+                if job:
+                    jobs.append(job)
+            polite_delay(1.0, 2.0)
+        except Exception as e:
+            logger.error(f"[glints] {e}")
+            break
+    logger.info(f"[glints] Total: {len(jobs)} jobs")
+    return jobs
+
+
+def parse_glints_hit(hit: dict) -> Optional[Dict]:
+    try:
+        title = hit.get("title") or hit.get("jobTitle") or hit.get("name") or ""
+        if not title:
+            return None
+        company = ""
+        co = hit.get("company") or hit.get("employer") or {}
+        if isinstance(co, dict):
+            company = co.get("name", "")
+        elif isinstance(co, str):
+            company = co
+        location = hit.get("location") or hit.get("city") or hit.get("address") or ""
+        if isinstance(location, dict):
+            location = location.get("name", "")
+        salary = hit.get("salary") or hit.get("salary_raw") or ""
+        url = hit.get("url") or hit.get("slug") or hit.get("id") or ""
+        if url and not url.startswith("http"):
+            url = "https://glints.com" + url
+        job_id = generate_job_id("glints", url or title)
+        return {
+            "job_id": job_id, "job_title": title,
+            "company_name": company if company else "Unknown",
+            "city": normalize_city(str(location)),
+            "salary_raw": str(salary) if salary else "",
+            "skills_raw": [], "experience_years": None,
+            "education_level": "Not specified", "job_type": "Full-time",
+            "remote_option": extract_remote_option(str(location), ""),
+            "has_english": False, "posted_at": hit.get("posted_at") or hit.get("created_at") or "",
+            "source_site": "glints", "source_url": url,
+            "description_raw": str(hit.get("description") or "")[:500],
+        }
+    except Exception as e:
+        logger.warning(f"[glints-parse] {e}")
+        return None
+
+
+# ============================================================
+# SCRAPER 11: CAREERVIET (HTML + Next.js)
+# ============================================================
+def scrape_careerviet(keyword: str = "IT phan mem", max_pages: int = 3) -> List[Dict]:
+    """Cao careerviet.vn tu HTML job cards.
+    Tu khoa: 'CNTT- Phan cung - mang', 'CNTT Phan mem', 'IT'."""
+    import re as _re
+    jobs = []
+    for page in range(max_pages):
+        try:
+            url = f"https://www.careerviet.vn/viec-lam/tim-kiem?q={quote_plus(keyword)}&page={page+1}"
+            logger.info(f"[careerviet] Page {page+1}: {url}")
+            resp = requests.get(url, headers=get_headers(), timeout=15, verify=False)
+            if resp.status_code != 200:
+                break
+
+            # Try __NEXT_DATA__
+            hits = []
+            m = _re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', resp.text, _re.DOTALL)
+            if m:
+                data = json.loads(m.group(1))
+                pp = data.get("props", {}).get("pageProps", {})
+                for key in pp:
+                    val = pp[key]
+                    if isinstance(val, list) and len(val) > 0 and isinstance(val[0], dict):
+                        if any(k in val[0] for k in ["title", "jobTitle", "company"]):
+                            hits = val
+                            break
+
+            if not hits:
+                # HTML fallback
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(resp.text, "lxml")
+                for sel in ["div.job-item", "div[class*='job-card']", "article[class*='job']", "li[class*='job']", "div[class*='card']"]:
+                    cards = soup.select(sel)
+                    if cards:
+                        for card in cards[:30]:
+                            title_el = card.select_one("h2 a, h3 a, a[class*='title'], a[href*='viec-lam']")
+                            if title_el:
+                                title = title_el.get_text(strip=True)
+                                url_el = title_el.get("href", "")
+                                if url_el and not url_el.startswith("http"):
+                                    url_el = "https://www.careerviet.vn" + url_el
+                                co_el = card.select_one("a[class*='company'], span[class*='company'], div[class*='company']")
+                                company = co_el.get_text(strip=True) if co_el else ""
+                                loc_el = card.select_one("span[class*='location'], div[class*='location']")
+                                location = loc_el.get_text(strip=True) if loc_el else ""
+                                sal_el = card.select_one("span[class*='salary'], div[class*='salary']")
+                                salary = sal_el.get_text(strip=True) if sal_el else ""
+                                hits.append({"title": title, "company": company, "location": location, "salary": salary, "url": url_el})
+                        break
+            if not hits:
+                break
+
+            logger.info(f"[careerviet] {len(hits)} jobs")
+            for hit in hits:
+                if isinstance(hit, dict) and "title" in hit:
+                    job = parse_careerviet_hit(hit)
+                    if job:
+                        jobs.append(job)
+            polite_delay(0.5, 1.0)
+        except Exception as e:
+            logger.error(f"[careerviet] {e}")
+            break
+    logger.info(f"[careerviet] Total: {len(jobs)} jobs")
+    return jobs
+
+
+def parse_careerviet_hit(hit: dict) -> Optional[Dict]:
+    try:
+        title = hit.get("title") or ""
+        if not title:
+            return None
+        company = hit.get("company") or ""
+        if isinstance(company, dict):
+            company = company.get("name", "")
+        location = hit.get("location") or hit.get("city") or ""
+        salary = hit.get("salary") or ""
+        url = hit.get("url") or ""
+        skills = hit.get("skills") or hit.get("tags") or []
+        if isinstance(skills, str):
+            skills = [skills]
+        job_id = generate_job_id("careerviet", url or title)
+        return {
+            "job_id": job_id, "job_title": title,
+            "company_name": str(company) if company else "Unknown",
+            "city": normalize_city(str(location)),
+            "salary_raw": str(salary) if salary else "",
+            "skills_raw": skills if isinstance(skills, list) else [],
+            "experience_years": None, "education_level": "Not specified",
+            "job_type": "Full-time",
+            "remote_option": extract_remote_option(str(location), ""),
+            "has_english": False, "posted_at": hit.get("posted_at") or hit.get("created_at") or "",
+            "source_site": "careerviet", "source_url": url,
+            "description_raw": str(hit.get("description") or "")[:500],
+        }
+    except Exception as e:
+        logger.warning(f"[careerviet-parse] {e}")
+        return None
+
+
+# ============================================================
 # MAIN ORCHESTRATOR
+import json as _json, os as _os
+_PROGRESS_FILE = None
+_PROGRESS_LOG = []
+def _progress(site, kw, n, detail=""):
+    if _PROGRESS_FILE:
+        try:
+            entry = {"site": site, "keyword": kw, "total_jobs": n, "detail": detail}
+            with open(_PROGRESS_FILE, "w", encoding="utf-8") as f:
+                _json.dump(entry, f)
+            # Ghi them vao log file de UI doc
+            logfile = _os.path.join(_os.path.dirname(_PROGRESS_FILE), "scraper_log.txt")
+            with open(logfile, "a", encoding="utf-8") as lf:
+                if detail:
+                    lf.write(f"{detail}\n")
+        except:
+            pass
+
+
+def _run_config_scraper(site_cfg, keyword=None, max_pages=None):
+    """Run job scraper from config system (e.g. vieclam24h)."""
+    try:
+        from src.config.method_handlers import next_data_handler, jsonld_handler, html_handler, api_handler
+        _MH = {"jsonld": jsonld_handler, "next_data": next_data_handler, "html_cards": html_handler, "api_guest": api_handler}
+        meth = site_cfg["methods"][0] if site_cfg["methods"] else "html_cards"
+        handler = _MH.get(meth)
+        if not handler:
+            return []
+        all_j = []
+        kws = [keyword] if keyword else site_cfg.get("keywords", [])[:3]
+        pages = max_pages or 2
+        for kw in kws:
+            try:
+                if handler:
+                    jobs = handler(site_cfg, kw, max_pages=pages)
+                    all_j.extend(jobs)
+            except:
+                pass
+        return all_j
+    except ImportError:
+        return []
+
+
 def run_all_scrapers(
     keywords: List[str] = None,
     max_pages_per_site: int = 5,
     min_total_jobs: int = 500,
     use_fallback: bool = True,
+    progress_file: Optional[str] = None,
 ) -> Dict[str, List[Dict]]:
-    """Chạy tất cả scrapers theo thứ tự ưu tiên.
-
-    Trả về dict: jobs, skills, companies.
-    Nếu total < min_total_jobs -> chạy fallback cho phần thiếu (nếu use_fallback=True).
+    """Chạy tất cả scrapers.
+    progress_file: file JSON ghi trạng thái real-time.
     """
+    import json as _json, os as _os
+    global _PROGRESS_FILE
+    _PROGRESS_FILE = progress_file
+    _logfile = _os.path.join(_os.path.dirname(progress_file), "scraper_log.txt") if progress_file else None
+    def _log(msg):
+        if _logfile:
+            try:
+                with open(_logfile, "a", encoding="utf-8") as lf:
+                    lf.write(msg + chr(10))
+            except:
+                pass
+    def _prog(site, kw, n, detail=""):
+        if progress_file:
+            try:
+                with open(progress_file, "w", encoding="utf-8") as f:
+                    _json.dump({"site": site, "keyword": kw, "total_jobs": n, "detail": detail}, f)
+                if detail:
+                    with open(_logfile, "a", encoding="utf-8") as lf:
+                        lf.write(detail + chr(10))
+            except:
+                pass
+
     if keywords is None:
         keywords = ["python", "java", "javascript", "react", "data", "devops", "nodejs", "frontend", "backend", "fullstack", "mobile", "tester", "cloud", "aws", "ai", "ml"]
 
@@ -1022,22 +1574,37 @@ def run_all_scrapers(
     scrapers = [
         ("itviec", scrape_itviec_jsonld),
         ("vietnamworks", scrape_vietnamworks_embedded),
+        ("linkedin", scrape_linkedin_guest),
+        ("glints", scrape_glints),
+        ("careerviet", scrape_careerbuilder),
         ("topdev", scrape_topdev),
-        ("careerbuilder", scrape_careerbuilder),
     ]
 
-    # Use all keywords for itviec/vnworks, fewer for less reliable sites
-    keyword_limits = {"itviec": 5, "vietnamworks": 5, "topdev": 2, "careerbuilder": 1}
+    keyword_limits = {"itviec": 6, "vietnamworks": 6, "linkedin": 10, "glints": 6, "careerviet": 4, "topdev": 2, "vieclam24h": 4}
+
+    # Them scraper tu config system (vieclam24h, ...)
+    try:
+        from src.config.scraper_config import SITE_CONFIGS
+        for sc in SITE_CONFIGS:
+            if not sc["enabled"] or any(s[0] == sc["name"] for s in scrapers):
+                continue
+            sname = sc["name"]
+            scrapers.append((sname, lambda cfg=sc, **kwargs: _run_config_scraper(cfg, **kwargs)))
+            keyword_limits[sname] = min(len(sc.get("keywords", [])), 3)
+    except ImportError:
+        pass
+
     for name, scraper_func in scrapers:
-        logger.info(f"=== Starting scraper: {name} ===")
+        _prog(name, "", len(all_jobs), f"🔄 Bat dau crawl **{name}**...")
         limit = keyword_limits.get(name, 3)
         for kw in keywords[:limit]:
             try:
+                _prog(name, kw, len(all_jobs), f"⏳ **{name}** dang crawl keyword *{kw}*...")
                 jobs = scraper_func(keyword=kw, max_pages=max_pages_per_site)
                 all_jobs.extend(jobs)
-                logger.info(f"[{name}] Keyword '{kw}': {len(jobs)} jobs")
+                _prog(name, kw, len(all_jobs), f"✅ **{name}** keyword *{kw}*: {len(jobs)} jobs (tong: {len(all_jobs)})")
             except Exception as e:
-                logger.error(f"[{name}] Error with keyword '{kw}': {e}")
+                _prog(name, kw, len(all_jobs), f"❌ **{name}** keyword *{kw}*: {e}")
 
     # Deduplicate by job_id
     seen = set()
@@ -1145,8 +1712,144 @@ def extract_skills_from_text(text: str) -> List[str]:
     return list(set(found))  # Deduplicate
 
 
+# ================================================================
+# NEW PIPELINE: Real data via DetailCrawler (no fallback)
+# ================================================================
+
+def run_real_scrapers(
+    keywords: List[str] = None,
+    max_pages_per_site: int = -1,
+    min_total_jobs: int = 1000,
+    use_fallback: bool = False,
+    progress_file: Optional[str] = None,
+) -> Dict[str, List[Dict]]:
+    """Run full pipeline: listing → detail → city filter → normalize.
+
+    Uses DetailCrawler for deep field extraction. No fallback by default.
+    """
+    from src.data.detail_crawler import ListingCollector, DetailCrawler, normalize_to_job_dict
+
+    if keywords is None:
+        keywords = ["python", "java", "javascript", "react", "data", "devops", "nodejs",
+                     "frontend", "backend", "fullstack", "mobile", "tester", "cloud", "aws"]
+
+    collector = ListingCollector()
+    crawler = DetailCrawler(max_workers=2, delay_range=(0.5, 1.5), save_html=True)
+
+    ALLOWED_CITIES = {"HCMC", "Hanoi", "Da Nang", "Can Tho"}
+
+    from src.config.scraper_config import SITE_CONFIGS
+
+    all_jobs = []
+    def _prog(site, kw, n, detail=""):
+        if progress_file:
+            import json as _json
+            try:
+                with open(progress_file, "w", encoding="utf-8") as f:
+                    _json.dump({"site": site, "keyword": kw, "total_jobs": n, "detail": detail}, f)
+            except:
+                pass
+
+    for site_cfg in SITE_CONFIGS:
+        if not site_cfg.get("enabled", True):
+            continue
+        sname = site_cfg["name"]
+        site_keywords = site_cfg.get("keywords", keywords)[:5]  # max 5 keywords per site
+        site_cities = set(site_cfg.get("cities", []))
+        _prog(sname, "", len(all_jobs), f"🔄 Bắt đầu crawl {sname}...")
+
+        for kw in (site_keywords or keywords[:3]):
+            _prog(sname, kw, len(all_jobs), f"⏳ {sname}: collecting URLs for '{kw}'...")
+
+            # STEP 1: Collect job URLs from listing pages
+            urls = collector.collect(site_cfg, kw, max_pages=max_pages_per_site)
+            if not urls:
+                continue
+            _prog(sname, kw, len(all_jobs), f"🔗 {sname}/{kw}: {len(urls)} URLs thu thập được")
+
+            # STEP 2: Crawl detail pages
+            jobs = crawler.crawl_many(urls, sname)
+            _prog(sname, kw, len(all_jobs), f"📥 {sname}/{kw}: {len(jobs)} detail pages crawled")
+
+            for job in jobs:
+                # Normalize
+                normalized = normalize_to_job_dict(job)
+                # City filter
+                city = normalized.get("city", "")
+                if city not in ALLOWED_CITIES and city != "Remote":
+                    continue
+                # Also filter by site_cities if configured
+                if site_cities and city not in site_cities and city != "Unknown":
+                    if city not in site_cities:
+                        continue
+                all_jobs.append(normalized)
+
+    logger.info(f"[RealScrapers] Total jobs crawled: {len(all_jobs)}")
+
+    # Dedup by job_id
+    seen = set()
+    unique_jobs = []
+    for job in all_jobs:
+        jid = job.get("job_id", "")
+        if jid and jid not in seen:
+            seen.add(jid)
+            unique_jobs.append(job)
+        elif not jid:
+            unique_jobs.append(job)
+
+    logger.info(f"[RealScrapers] After dedup: {len(unique_jobs)} jobs")
+
+    # Check minimum
+    if len(unique_jobs) < min_total_jobs:
+        msg = f"⚠️ Only {len(unique_jobs)} real jobs crawled, target {min_total_jobs}"
+        if use_fallback:
+            needed = min_total_jobs - len(unique_jobs)
+            logger.warning(f"{msg} — generating {needed} fallback records")
+            fallback = generate_fallback_data(needed)
+            unique_jobs.extend(fallback["jobs"])
+            all_skills = fallback.get("skills", [])
+            all_companies = fallback.get("companies", [])
+        else:
+            logger.warning(msg)
+            all_skills = []
+            all_companies = []
+            return {"jobs": unique_jobs, "skills": [], "companies": [],
+                    "warning": f"Only {len(unique_jobs)} jobs — target was {min_total_jobs}"}
+    else:
+        logger.info(f"✅ {len(unique_jobs)} jobs — meets target of {min_total_jobs}")
+
+    # Build skills list from jobs
+    all_skills = []
+    for job in unique_jobs:
+        for skill in job.get("skills_raw", []):
+            all_skills.append({
+                "job_id": job["job_id"],
+                "skill_name": skill,
+                "original_name": skill,
+                "skill_group": "Other",
+                "required_level": "Not specified",
+            })
+
+    # Build companies list from jobs
+    company_map = {}
+    for job in unique_jobs:
+        cid = f"comp_{hashlib.md5(job['company_name'].encode()).hexdigest()[:8]}"
+        if cid not in company_map:
+            company_map[cid] = {
+                "company_id": cid,
+                "company_name": job["company_name"],
+                "company_size": "Unknown",
+                "industry": "Information Technology",
+                "city": job.get("city", ""),
+                "source_site": job.get("source_site", ""),
+            }
+    all_companies = list(company_map.values())
+
+    logger.info(f"Final: {len(unique_jobs)} jobs, {len(all_skills)} skills, {len(all_companies)} companies")
+    return {"jobs": unique_jobs, "skills": all_skills, "companies": all_companies}
+
+
 if __name__ == "__main__":
-    # Test run
     logging.basicConfig(level=logging.INFO)
-    result = run_all_scrapers(keywords=["python", "java", "react"], max_pages_per_site=2, min_total_jobs=100)
+    result = run_real_scrapers(keywords=["python", "java", "react"], min_total_jobs=100)
     print(f"Jobs: {len(result['jobs'])}, Skills: {len(result['skills'])}, Companies: {len(result['companies'])}")

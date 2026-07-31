@@ -31,6 +31,8 @@ class Company:
     source_site: str = ""
     source_url: str = ""
     crawled_at: datetime = field(default_factory=datetime.now)
+    name_raw: str = ""          # 🆕 tên gốc trước normalize
+    website_url: str = ""       # 🆕 website từ detail page
 
     def __post_init__(self):
         # Normalize company size
@@ -81,6 +83,8 @@ class Company:
             "source_site": self.source_site,
             "source_url": self.source_url,
             "crawled_at": self.crawled_at.isoformat(),
+            "name_raw": self.name_raw,
+            "website_url": self.website_url,
         }
 
     @classmethod
@@ -102,6 +106,8 @@ class Company:
             source_site=data.get("source_site", ""),
             source_url=data.get("source_url", ""),
             crawled_at=crawled_at,
+            name_raw=data.get("name_raw", ""),
+            website_url=data.get("website_url", ""),
         )
 
     def __hash__(self):
