@@ -492,6 +492,18 @@ with tab4:
     from src.config.scraper_config import SITE_CONFIGS
     site_names = [s["name"] for s in SITE_CONFIGS if s.get("enabled", True)]
 
+    def _close_browser():
+        pw_state = st.session_state.get("_pw")
+        if pw_state:
+            try:
+                if pw_state.get("browser"):
+                    pw_state["browser"].close()
+                if pw_state.get("pw"):
+                    pw_state["pw"].stop()
+            except Exception:
+                pass
+            st.session_state["_pw"] = None
+
     # Trạng thái session hiện tại
     sessions = am.list_sessions()
     st.subheader("Session đã lưu")
@@ -515,6 +527,8 @@ with tab4:
     col1, col2 = st.columns(2)
     with col1:
         if st.button("Mở browser đăng nhập", key="open_login"):
+            _close_browser()
+            pw = browser = None
             try:
                 from src.data.playwright_crawler import PlaywrightCrawler
                 pc = PlaywrightCrawler(auth_manager=am)
@@ -529,6 +543,16 @@ with tab4:
                 st.success("Browser đã mở. Đăng nhập trong browser, rồi bấm 'Lưu session'.")
             except Exception as e:
                 st.error(f"Lỗi mở browser: {e}")
+                if browser:
+                    try:
+                        browser.close()
+                    except Exception:
+                        pass
+                if pw:
+                    try:
+                        pw.stop()
+                    except Exception:
+                        pass
     with col2:
         if st.button("Lưu session", key="save_session"):
             pw_state = st.session_state.get("_pw")
@@ -536,13 +560,12 @@ with tab4:
                 try:
                     state = pw_state["context"].storage_state()
                     am.save_storage_state(sel_site, state)
-                    pw_state["browser"].close()
-                    pw_state["pw"].stop()
-                    st.session_state["_pw"] = None
+                    _close_browser()
                     st.success(f"Đã lưu session {sel_site}")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Lỗi lưu: {e}")
+                    _close_browser()
             else:
                 st.warning("Chưa mở browser. Bấm 'Mở browser đăng nhập' trước.")
 
