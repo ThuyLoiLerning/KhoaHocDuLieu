@@ -398,6 +398,20 @@ class DetailCrawler:
             logger.warning(f"[DetailCrawler] {site_name}: {e}")
             return None
 
+    # Nếu có session login, thử Playwright render (lấy data ẩn sau login)
+    def crawl_one_authenticated(self, url: str, site_name: str) -> Optional[dict]:
+        from src.data.auth_manager import AuthManager
+        from src.data.playwright_crawler import PlaywrightCrawler
+        am = AuthManager()
+        if not am.has_session(site_name):
+            return None
+        pc = PlaywrightCrawler(auth_manager=am)
+        try:
+            job = pc.crawl_one(url, site_name)
+            return job
+        finally:
+            pc.close()
+
     def crawl_many(self, urls: list[str], site_name: str) -> list[dict]:
         """Crawl multiple detail pages."""
         jobs = []
