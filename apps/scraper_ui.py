@@ -11,6 +11,7 @@ import pandas as pd
 
 from src.data.collector import run_all_scrapers
 from src.data.data_manager import JobDataManager
+from src.data.auth_manager import AuthManager
 
 st.set_page_config(page_title="Job Scraper", layout="wide")
 
@@ -103,7 +104,7 @@ with st.sidebar:
     use_fallback = st.checkbox("Auto fallback", value=False, disabled=st.session_state.crawling)
 
 # === Tabs ===
-tab1, tab2, tab3 = st.tabs(["Crawl", "View Data", "Config & Test"])
+tab1, tab2, tab3, tab4 = st.tabs(["Crawl", "View Data", "Config & Test", "Login"])
 
 # ===================== TAB 1: CRAWL =====================
 with tab1:
@@ -481,4 +482,67 @@ with tab3:
                     st.info(f"No data from {r['method']}")
                     if r["error"]:
                         st.caption(f"Error: {r['error']}")
+
+# ===================== TAB 4: LOGIN =====================
+with tab4:
+    st.header("Đăng nhập & Session")
+    st.caption("Đăng nhập thủ công để crawl data chi tiết (vd lương itviec ẩn sau login).")
+
+    am = AuthManager()
+    from src.config.scraper_config import SITE_CONFIGS
+    site_names = [s["name"] for s in SITE_CONFIGS if s.get("enabled", True)]
+
+    # Trạng thái session hiện tại
+    sessions = am.list_sessions()
+    st.subheader("Session đã lưu")
+    if sessions:
+        for sname, sinfo in sessions.items():
+            mt = time.strftime("%Y-%m-%d %H:%M", time.localtime(sinfo["mtime"]))
+            c1, c2 = st.columns([3, 1])
+            with c1:
+                st.write(f"**{sname}** — lưu lúc {mt}")
+            with c2:
+                if st.button("Xóa", key=f"del_{sname}"):
+                    am.delete_session(sname)
+                    st.rerun()
+    else:
+        st.info("Chưa có session nào.")
+
+    st.divider()
+    st.subheader("Đăng nhập mới")
+    sel_site = st.selectbox("Chọn site", site_names)
+    login_url = st.text_input("URL đăng nhập", value="https://itviec.com/viec-lam-it" if sel_site == "itviec" else "")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Mở browser đăng nhập", key="open_login"):
+            try:
+                from src.data.playwright_crawler import PlaywrightCrawler
+                pc = PlaywrightCrawler(auth_manager=am)
+                # Reuse auth logic qua PlaywrightCrawler mở browser headless=False
+                from playwright.sync_api import sync_playwright
+                pw = sync_playwright().start()
+                browser = pw.chromium.launch(headless=False)
+                context = browser.new_context()
+                page = context.new_page()
+                page.goto(login_url or "https://itviec.com/viec-lam-it", timeout=60000)
+                st.session_state["_pw"] = {"pw": pw, "browser": browser, "context": context, "page": page}
+                st.success("Browser đã mở. Đăng nhập trong browser, rồi bấm 'Lưu session'.")
+            except Exception as e:
+                st.error(f"Lỗi mở browser: {e}")
+    with col2:
+        if st.button("Lưu session", key="save_session"):
+            pw_state = st.session_state.get("_pw")
+            if pw_state:
+                try:
+                    state = pw_state["context"].storage_state()
+                    am.save_storage_state(sel_site, state)
+                    pw_state["browser"].close()
+                    pw_state["pw"].stop()
+                    st.session_state["_pw"] = None
+                    st.success(f"Đã lưu session {sel_site}")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Lỗi lưu: {e}")
+            else:
+                st.warning("Chưa mở browser. Bấm 'Mở browser đăng nhập' trước.")
 
