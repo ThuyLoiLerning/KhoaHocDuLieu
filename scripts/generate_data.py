@@ -30,16 +30,12 @@ print("=" * 60)
 
 result = run_real_scrapers(
     keywords=[
-        "python", "java", "javascript", "typescript", "react", "angular", "vue",
-        "nodejs", "frontend", "backend", "fullstack", "mobile", "android", "ios",
-        "flutter", "php", "ruby", "golang", "rust", "swift", "kotlin",
-        "data", "data engineer", "data analyst", "data scientist", "machine learning",
-        "ai", "devops", "cloud", "aws", "docker", "kubernetes",
-        "tester", "qa",
-        "product manager", "project manager", "tech lead",
-        "IT phan mem", "CNTT Phan mem", "lap trinh vien",
+        "python", "java", "javascript", "typescript", "react", "angular",
+        "nodejs", "frontend", "backend", "fullstack", "mobile",
+        "data", "devops", "cloud", "aws", "docker",
+        "tester", "qa", "product manager", "project manager",
     ],
-    max_pages_per_site=-1,  # crawl ALL pages
+    max_pages_per_site=-1,  # crawl ALL pages (scrapers auto-stop khi hết)
     min_total_jobs=1200,
     use_fallback=False,     # NO fallback!
 )

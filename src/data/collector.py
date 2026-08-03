@@ -803,15 +803,16 @@ def scrape_itviec_jsonld(keyword: str = "python", max_pages: int = 5) -> List[Di
             if not urls:
                 break
 
-            for job_url in urls:
-                try:
-                    job = parse_itviec_detail(job_url)
-                    if job:
-                        job["keyword"] = keyword
-                        jobs.append(job)
-                    polite_delay(1.0, 2.5)
-                except Exception as e:
-                    logger.warning(f"[itviec-jsonld] Parse error: {e}")
+            # Crawl detail pages via DetailCrawler (session reuse + retry 429)
+            from src.data.detail_crawler import DetailCrawler, normalize_to_job_dict
+            # itviec rate-limit — 2 workers + retry 429 (session reuse nhanh hơn new connection mỗi lần)
+            crawler = DetailCrawler(max_workers=2, delay_range=(0.5, 0.8))
+            detail_jobs = crawler.crawl_many(list(urls), "itviec")
+            for job in detail_jobs:
+                normalized = normalize_to_job_dict(job)
+                normalized["keyword"] = keyword
+                normalized["source_site"] = "itviec"
+                jobs.append(normalized)
 
             # Check next page
             next_btn = soup.select_one("a[rel='next']")
@@ -1554,11 +1555,14 @@ def run_all_scrapers(
             except:
                 pass
     def _prog(site, kw, n, detail=""):
+        # Luôn in ra console
+        if detail:
+            print(detail, flush=True)
         if progress_file:
             try:
                 with open(progress_file, "w", encoding="utf-8") as f:
                     _json.dump({"site": site, "keyword": kw, "total_jobs": n, "detail": detail}, f)
-                if detail:
+                if detail and _logfile:
                     with open(_logfile, "a", encoding="utf-8") as lf:
                         lf.write(detail + chr(10))
             except:
@@ -1576,13 +1580,10 @@ def run_all_scrapers(
         ("vietnamworks", scrape_vietnamworks_embedded),
         ("linkedin", scrape_linkedin_guest),
         ("glints", scrape_glints),
-        ("careerviet", scrape_careerbuilder),
         ("topdev", scrape_topdev),
     ]
 
-    keyword_limits = {"itviec": 6, "vietnamworks": 6, "linkedin": 10, "glints": 6, "careerviet": 4, "topdev": 2, "vieclam24h": 4}
-
-    # Them scraper tu config system (vieclam24h, ...)
+    # Them scraper tu config system (careerviet, vieclam24h, ...) — dùng cấu hình mới
     try:
         from src.config.scraper_config import SITE_CONFIGS
         for sc in SITE_CONFIGS:
@@ -1590,21 +1591,22 @@ def run_all_scrapers(
                 continue
             sname = sc["name"]
             scrapers.append((sname, lambda cfg=sc, **kwargs: _run_config_scraper(cfg, **kwargs)))
-            keyword_limits[sname] = min(len(sc.get("keywords", [])), 3)
     except ImportError:
         pass
 
-    for name, scraper_func in scrapers:
-        _prog(name, "", len(all_jobs), f"🔄 Bat dau crawl **{name}**...")
-        limit = keyword_limits.get(name, 3)
-        for kw in keywords[:limit]:
+    n_sites = len(scrapers)
+    for site_idx, (name, scraper_func) in enumerate(scrapers, start=1):
+        _prog(name, "", len(all_jobs), f"━━━ [Site {site_idx}/{n_sites}] {name} — BAT DAU crawl ━━━")
+        n_kw = len(keywords)
+        for kw_idx, kw in enumerate(keywords, start=1):
             try:
-                _prog(name, kw, len(all_jobs), f"⏳ **{name}** dang crawl keyword *{kw}*...")
+                _prog(name, kw, len(all_jobs), f"  [{site_idx}/{n_sites}] {name} | keyword {kw_idx}/{n_kw}: '{kw}' ...")
                 jobs = scraper_func(keyword=kw, max_pages=max_pages_per_site)
                 all_jobs.extend(jobs)
-                _prog(name, kw, len(all_jobs), f"✅ **{name}** keyword *{kw}*: {len(jobs)} jobs (tong: {len(all_jobs)})")
+                _prog(name, kw, len(all_jobs), f"  [{site_idx}/{n_sites}] {name} | keyword {kw_idx}/{n_kw}: '{kw}' — {len(jobs)} jobs (tổng: {len(all_jobs)})")
             except Exception as e:
-                _prog(name, kw, len(all_jobs), f"❌ **{name}** keyword *{kw}*: {e}")
+                _prog(name, kw, len(all_jobs), f"  [{site_idx}/{n_sites}] {name} | keyword {kw_idx}/{n_kw}: '{kw}' — LỖI: {e}")
+        _prog(name, "", len(all_jobs), f"━━━ [Site {site_idx}/{n_sites}] {name} — XONG (tổng {len(all_jobs)} jobs) ━━━")
 
     # Deduplicate by job_id
     seen = set()
@@ -1713,7 +1715,7 @@ def extract_skills_from_text(text: str) -> List[str]:
 
 
 # ================================================================
-# NEW PIPELINE: Real data via DetailCrawler (no fallback)
+# NEW PIPELINE: Real data via old scrapers + DetailCrawler enhance
 # ================================================================
 
 def run_real_scrapers(
@@ -1723,103 +1725,134 @@ def run_real_scrapers(
     use_fallback: bool = False,
     progress_file: Optional[str] = None,
 ) -> Dict[str, List[Dict]]:
-    """Run full pipeline: listing → detail → city filter → normalize.
+    """Run full pipeline: old scrapers (listing data) → DetailCrawler enhance.
 
-    Uses DetailCrawler for deep field extraction. No fallback by default.
+    Strategy:
+      1. Run proven old scrapers to get base job data from listing pages
+      2. For each job with source_url, crawl detail page to enhance fields
+      3. Merge: detail fields override listing fields where available
+      4. No fallback by default
     """
-    from src.data.detail_crawler import ListingCollector, DetailCrawler, normalize_to_job_dict
+    import json as _json, os as _os
 
-    if keywords is None:
-        keywords = ["python", "java", "javascript", "react", "data", "devops", "nodejs",
-                     "frontend", "backend", "fullstack", "mobile", "tester", "cloud", "aws"]
-
-    collector = ListingCollector()
-    crawler = DetailCrawler(max_workers=2, delay_range=(0.5, 1.5), save_html=True)
-
-    ALLOWED_CITIES = {"HCMC", "Hanoi", "Da Nang", "Can Tho"}
-
-    from src.config.scraper_config import SITE_CONFIGS
-
-    all_jobs = []
     def _prog(site, kw, n, detail=""):
         if progress_file:
-            import json as _json
             try:
                 with open(progress_file, "w", encoding="utf-8") as f:
                     _json.dump({"site": site, "keyword": kw, "total_jobs": n, "detail": detail}, f)
             except:
                 pass
 
-    for site_cfg in SITE_CONFIGS:
-        if not site_cfg.get("enabled", True):
-            continue
-        sname = site_cfg["name"]
-        site_keywords = site_cfg.get("keywords", keywords)[:5]  # max 5 keywords per site
-        site_cities = set(site_cfg.get("cities", []))
-        _prog(sname, "", len(all_jobs), f"🔄 Bắt đầu crawl {sname}...")
+    # STEP 1: Run old scrapers + config sites (listing-level data)
+    _prog("pipeline", "", 0, "Bat dau crawl listing data tu old scrapers...")
+    result = run_all_scrapers(
+        keywords=keywords or ["python", "java", "javascript", "react", "data", "devops"],
+        max_pages_per_site=max(1, max_pages_per_site if max_pages_per_site > 0 else 3),
+        min_total_jobs=0,  # Don't fallback here
+        use_fallback=False,
+        progress_file=progress_file,
+    )
+    base_jobs = result["jobs"]
+    base_skills = result["skills"]
+    base_companies = result["companies"]
+    _prog("pipeline", "", len(base_jobs), f"Step 1 done: {len(base_jobs)} jobs from listing")
 
-        for kw in (site_keywords or keywords[:3]):
-            _prog(sname, kw, len(all_jobs), f"⏳ {sname}: collecting URLs for '{kw}'...")
+    if not base_jobs:
+        logger.warning("[RealScrapers] No jobs crawled")
+        return {"jobs": [], "skills": [], "companies": []}
 
-            # STEP 1: Collect job URLs from listing pages
-            urls = collector.collect(site_cfg, kw, max_pages=max_pages_per_site)
-            if not urls:
+    # STEP 2: Enhance with DetailCrawler (crawl detail pages)
+    from src.data.detail_crawler import DetailCrawler, normalize_to_job_dict
+
+    crawler = DetailCrawler(max_workers=2, delay_range=(0.5, 1.0))
+
+    ALLOWED_CITIES = {"HCMC", "Hanoi", "Da Nang", "Can Tho"}
+    enhanced_jobs = []
+
+    # Group jobs by site for detail crawling
+    from collections import defaultdict
+    by_site = defaultdict(list)
+    for job in base_jobs:
+        by_site[job.get("source_site", "unknown")].append(job)
+
+    for site_name, site_jobs in by_site.items():
+        _prog(site_name, "", len(enhanced_jobs), f"Dang enhance {site_name} ({len(site_jobs)} jobs)...")
+        n_enhanced = 0
+        urls = [j.get("source_url", "") for j in site_jobs if j.get("source_url")]
+        # Dedup URLs
+        seen_urls = set()
+        unique_urls = []
+        for u in urls:
+            if u and u not in seen_urls:
+                seen_urls.add(u)
+                unique_urls.append(u)
+
+        # Crawl detail pages
+        detail_jobs = crawler.crawl_many(unique_urls, site_name)
+        detail_map = {}
+        for dj in detail_jobs:
+            detail_map[dj.get("source_url", "")] = dj
+
+        # Merge
+        for job in site_jobs:
+            url = job.get("source_url", "")
+            detail = detail_map.get(url, {})
+
+            # City filter
+            city = detail.get("city") or job.get("city", "")
+            if city not in ALLOWED_CITIES and city != "Unknown":
                 continue
-            _prog(sname, kw, len(all_jobs), f"🔗 {sname}/{kw}: {len(urls)} URLs thu thập được")
 
-            # STEP 2: Crawl detail pages
-            jobs = crawler.crawl_many(urls, sname)
-            _prog(sname, kw, len(all_jobs), f"📥 {sname}/{kw}: {len(jobs)} detail pages crawled")
+            merged = dict(job)  # Start with base
 
-            for job in jobs:
-                # Normalize
-                normalized = normalize_to_job_dict(job)
-                # City filter
-                city = normalized.get("city", "")
-                if city not in ALLOWED_CITIES and city != "Remote":
-                    continue
-                # Also filter by site_cities if configured
-                if site_cities and city not in site_cities and city != "Unknown":
-                    if city not in site_cities:
-                        continue
-                all_jobs.append(normalized)
+            # Enhance with detail fields (only overwrite empty values)
+            enhance_fields = [
+                "city", "salary_min", "salary_max", "salary_raw", "salary_hidden",
+                "experience_years", "education_level", "job_type", "remote_option",
+                "has_english", "skills_raw", "description_raw",
+                "posted_at", "expired_at", "benefits", "working_hours",
+                "contract_type", "job_level", "num_hiring",
+            ]
+            for f in enhance_fields:
+                dv = detail.get(f)
+                if dv is not None and dv != "" and dv != []:
+                    merged[f] = dv
 
-    logger.info(f"[RealScrapers] Total jobs crawled: {len(all_jobs)}")
+            # Ensure description from detail if we have it
+            if detail.get("description_raw") and len(str(detail.get("description_raw", ""))) > len(str(merged.get("description_raw", ""))):
+                merged["description_raw"] = detail["description_raw"]
 
-    # Dedup by job_id
+            enhanced_jobs.append(merged)
+            n_enhanced += 1
+
+        _prog(site_name, "", len(enhanced_jobs), f"{site_name}: {n_enhanced}/{len(site_jobs)} enhanced")
+
+    # Final dedup
     seen = set()
     unique_jobs = []
-    for job in all_jobs:
+    for job in enhanced_jobs:
         jid = job.get("job_id", "")
         if jid and jid not in seen:
             seen.add(jid)
             unique_jobs.append(job)
-        elif not jid:
-            unique_jobs.append(job)
 
-    logger.info(f"[RealScrapers] After dedup: {len(unique_jobs)} jobs")
+    logger.info(f"[RealScrapers] After enhance + dedup: {len(unique_jobs)} jobs")
 
-    # Check minimum
+    # Check minimum — fallback if needed
     if len(unique_jobs) < min_total_jobs:
-        msg = f"⚠️ Only {len(unique_jobs)} real jobs crawled, target {min_total_jobs}"
+        msg = f"Only {len(unique_jobs)} real jobs crawled, target {min_total_jobs}"
         if use_fallback:
             needed = min_total_jobs - len(unique_jobs)
             logger.warning(f"{msg} — generating {needed} fallback records")
             fallback = generate_fallback_data(needed)
             unique_jobs.extend(fallback["jobs"])
-            all_skills = fallback.get("skills", [])
-            all_companies = fallback.get("companies", [])
+            base_skills.extend(fallback.get("skills", []))
+            base_companies.extend(fallback.get("companies", []))
         else:
             logger.warning(msg)
-            all_skills = []
-            all_companies = []
-            return {"jobs": unique_jobs, "skills": [], "companies": [],
-                    "warning": f"Only {len(unique_jobs)} jobs — target was {min_total_jobs}"}
-    else:
-        logger.info(f"✅ {len(unique_jobs)} jobs — meets target of {min_total_jobs}")
 
-    # Build skills list from jobs
-    all_skills = []
+    # Build final skills/companies
+    all_skills = list(base_skills)
     for job in unique_jobs:
         for skill in job.get("skills_raw", []):
             all_skills.append({
@@ -1830,7 +1863,6 @@ def run_real_scrapers(
                 "required_level": "Not specified",
             })
 
-    # Build companies list from jobs
     company_map = {}
     for job in unique_jobs:
         cid = f"comp_{hashlib.md5(job['company_name'].encode()).hexdigest()[:8]}"

@@ -1,0 +1,4 @@
+--- Cell 14 ---
+Rows with salary: 0 / 2767 (0.0%)
+
+

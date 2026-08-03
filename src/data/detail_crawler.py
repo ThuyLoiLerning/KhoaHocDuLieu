@@ -15,6 +15,34 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+# ── Shared rate limiter ──
+# Theo dõi rate-limit toàn batch: khi 429 xảy ra nhiều, tăng khoảng cách giữa các request
+class RateLimiter:
+    """Adaptive rate limiter — tự tăng min-interval khi bị 429."""
+
+    def __init__(self, min_interval: float = 0.3):
+        self.min_interval = min_interval
+        self._last_request = 0.0
+        self._lock = __import__("threading").Lock()
+
+    def wait(self):
+        """Block cho đến khi đủ interval. Trả về interval hiện tại."""
+        import threading
+        with self._lock:
+            elapsed = time.time() - self._last_request
+            wait = self.min_interval - elapsed
+            if wait > 0:
+                time.sleep(wait)
+            self._last_request = time.time()
+            return self.min_interval
+
+    def on_429(self):
+        """Tăng min_interval khi bị rate-limit."""
+        self.min_interval = min(self.min_interval * 2, 5.0)
+
+
+_global_limiter = RateLimiter()
+
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0",
@@ -198,7 +226,7 @@ class ListingCollector:
         search_url = site.get("search_url", "/")
         sel = site.get("selectors", {})
         card_sel = sel.get("html_list", "a[href*='job'], a[href*='viec'], div[class*='job'], div[class*='card']")
-        detail_sel = "a[href*='job'], a[href*='viec'], a[href*='tuyen'], a[class*='title'], h2 a, h3 a"
+        detail_sel = sel.get("detail_url", "a[href*='job'], a[href*='viec'], a[href*='tuyen'], a[class*='title'], h2 a, h3 a")
         page = 1
         while True:
             url = f"{base_url}{search_url.replace('{keyword}', quote_plus(keyword)).replace('{page}', str(page))}"
@@ -293,12 +321,15 @@ class DetailCrawler:
     # Keyed by site name, values are {field: callable(detail_url, soup) → value}
     SITE_OVERRIDES: dict[str, dict[str, Callable]] = {}
 
-    def __init__(self, max_workers: int = 2, delay_range: tuple = (0.5, 1.5),
+    def __init__(self, max_workers: int = 4, delay_range: tuple = (0.2, 0.5),
                  save_html: bool = False, html_dir: str = "data/raw/html"):
         self.max_workers = max_workers
         self.delay_range = delay_range
         self.save_html = save_html
         self.html_dir = html_dir
+        # Session reuse — kết nối TCP/TLS dùng chung, tiết kiệm ~200-500ms/request
+        self.session = requests.Session()
+        self.session.headers.update(_headers())
 
     @classmethod
     def register_override(cls, site: str, field: str, func: Callable):
@@ -311,10 +342,35 @@ class DetailCrawler:
 
     def crawl_one(self, url: str, site_name: str) -> Optional[dict]:
         """Crawl one detail page → JobDict."""
-        try:
-            resp = requests.get(url, headers=_headers(), timeout=20, verify=False)
-            if resp.status_code != 200:
+        resp = None
+        for attempt in range(3):  # retry up to 3 times on 429
+            try:
+                _global_limiter.wait()
+                resp = self.session.get(url, headers=_headers(), timeout=20, verify=False)
+                if resp.status_code == 429:
+                    # Rate-limited — tăng interval toàn batch, respect Retry-After
+                    _global_limiter.on_429()
+                    wait = None
+                    ra = resp.headers.get("Retry-After")
+                    if ra and ra.isdigit():
+                        wait = min(int(ra), 10)
+                    else:
+                        wait = 2 + attempt * 2  # 2s, 4s, 6s
+                    logger.warning(f"[DetailCrawler] {site_name}: 429 → retry in {wait}s (interval={_global_limiter.min_interval:.1f}s)")
+                    time.sleep(wait)
+                    continue
+                break
+            except Exception:
+                time.sleep(1.5)
+                continue
+        if resp is None or resp.status_code != 200:
+            if resp is not None:
                 logger.warning(f"[DetailCrawler] {site_name}: {url[-40:]} → {resp.status_code}")
+            return None
+        try:
+            # Soft-404 detection: trang trả 200 nhưng nội dung là "không tìm thấy"
+            if self._is_soft_404(resp.text):
+                logger.warning(f"[DetailCrawler] {site_name}: soft-404 {url[-40:]}")
                 return None
             soup = BeautifulSoup(resp.text, "lxml")
 
@@ -453,6 +509,13 @@ class DetailCrawler:
                     job["salary_min"] = s_min
                     if s_max:
                         job["salary_max"] = s_max
+                else:
+                    # Salary string (vd "Cạnh tranh", "15-20 triệu")
+                    s_str = str(s_val).strip()
+                    if s_str:
+                        job["salary_raw"] = s_str
+                        if any(k in s_str.lower() for k in ["cạnh tranh", "thỏa thuận", "thoa thuan", "negotiable", "competitiv"]):
+                            job["salary_hidden"] = True
 
         # Date
         job["posted_at"] = data.get("datePosted", "")
@@ -463,7 +526,10 @@ class DetailCrawler:
         job["description_raw"] = desc
 
         # Remote
-        remote = data.get("employmentType", "").upper()
+        et = data.get("employmentType", "")
+        if isinstance(et, list):
+            et = " ".join(str(x) for x in et)
+        remote = str(et).upper()
         if "REMOTE" in remote:
             job["remote_option"] = "Remote"
         elif "HYBRID" in remote or "PART_REMOTE" in remote:
@@ -798,6 +864,33 @@ class DetailCrawler:
 
         return job
 
+    def _is_soft_404(self, html: str) -> bool:
+        """Detect soft-404: HTTP 200 nhưng nội dung là trang lỗi 'không tìm thấy'."""
+        if not html:
+            return True
+        soup = BeautifulSoup(html, "lxml")
+        # Ưu tiên title — đáng tin hơn body (body có thể chứa keyword URL bị inject)
+        title = (soup.title.get_text(strip=True) if soup.title else "") or ""
+        text = soup.get_text(" ", strip=True)
+        # Title là trang lỗi "Không tìm thấy từ khoá" — chắc chắn soft-404
+        if any(k in title.lower() for k in ["không tìm thấy", "khong tim thay", "page not found", "not found"]):
+            return True
+        # Body có heading lỗi đặc trưng (tránh false positive từ title keyword URL)
+        for h in soup.select("h1, h2, h3, .error, .not-found, [class*='error'], [class*='notfound']"):
+            t = h.get_text(" ", strip=True).lower()
+            if any(k in t for k in ["không tìm thấy", "khong tim thay", "không tồn tại", "khong ton tai",
+                                    "page not found", "not found", "rất tiếc", "rat tiec"]):
+                return True
+        # Fallback: body chứa cụm lỗi đầy đủ
+        lowered = text.lower()
+        for p in ["không tìm thấy trang", "khong tim thay trang",
+                  "trang này không tồn tại", "trang nay khong ton tai",
+                  "xin lỗi, trang bạn tìm kiếm không tồn tại",
+                  "page not found"]:
+            if p in lowered:
+                return True
+        return False
+
     def _save_raw_html(self, html: str, site_name: str, url: str):
         """Save raw HTML for debugging."""
         import os
@@ -868,6 +961,10 @@ def _extract_experience(text: str) -> Optional[float]:
     m = re.search(r'(\d+(?:\.\d+)?)\s*[-–—]\s*(\d+(?:\.\d+)?)\s*(?:năm|nam|year|yr)', text, re.I)
     if m:
         return (float(m.group(1)) + float(m.group(2))) / 2
+    # X+: "5+ năm", "3+ years"
+    m = re.search(r'(\d+(?:\.\d+)?)\s*\+\s*(?:năm|nam|year|yr)', text, re.I)
+    if m:
+        return float(m.group(1))
     # From: "từ 3 năm", "3+ năm", "trên 5 năm"
     m = re.search(r'(?:từ|tu|from|trên|tren|hơn|hon|over|min)\s*(\d+(?:\.\d+)?)\s*(?:năm|nam|year|yr)', text, re.I)
     if m:
@@ -881,7 +978,7 @@ def _extract_experience(text: str) -> Optional[float]:
     if m:
         return float(m.group(1))
     # Fresher / new grad
-    if re.search(r'\b(fresher|new\s*grad|mới\s*ra\s*trường|moi\s*ra\s*truong|chưa\s*có\s*kinh\s*nghiệm)\b', text, re.I):
+    if re.search(r'\b(fresher|new\s*grad|mới\s*ra\s*trường|moi\s*ra\s*truong|chưa\s*có\s*kinh\s*nghiệm|chua\s*co\s*kinh\s*nghiem)\b', text, re.I):
         return 0.0
     return None
 
@@ -891,15 +988,15 @@ def _extract_education(text: str) -> str:
     if not text:
         return "Not specified"
     tl = text.lower()
-    if re.search(r'\b(phd|doctor|tiến\s*sĩ)\b', tl):
+    if re.search(r'\b(phd|doctor|tiến\s*sĩ|tien\s*si)\b', tl):
         return "PhD"
-    if re.search(r'\b(master|thạc\s*sĩ|thac\s*si|cao\s*học)\b', tl):
+    if re.search(r'\b(master|thạc\s*sĩ|thac\s*si|cao\s*học|cao\s*hoc|thac si)\b', tl):
         return "Master"
-    if re.search(r'\b(bachelor|đại\s*học|cử\s*nhân|bằng\s*đh)\b', tl):
+    if re.search(r'\b(bachelor|đại\s*học|dai\s*hoc|cử\s*nhân|cu\s*nhan|bằng\s*đh|bang\s*dh|dai hoc)\b', tl):
         return "Bachelor"
-    if re.search(r'\b(college|cao\s*đẳng|trung\s*cấp)\b', tl):
+    if re.search(r'\b(college|cao\s*đẳng|cao\s*dang|trung\s*cấp|trung\s*cap)\b', tl):
         return "College"
-    if re.search(r'\b(high\s*school|phổ\s*thông|thpt)\b', tl):
+    if re.search(r'\b(high\s*school|phổ\s*thông|pho\s*thong|thpt)\b', tl):
         return "High School"
     return "Not specified"
 
