@@ -414,9 +414,12 @@ class DetailCrawler:
 
     def crawl_many(self, urls: list[str], site_name: str) -> list[dict]:
         """Crawl multiple detail pages."""
+        def _crawl_one_fallback(u: str, s: str):
+            return self.crawl_one(u, s) or self.crawl_one_authenticated(u, s)
+
         jobs = []
         with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
-            fut_map = {pool.submit(self.crawl_one, u, site_name): u for u in urls}
+            fut_map = {pool.submit(_crawl_one_fallback, u, site_name): u for u in urls}
             for fut in as_completed(fut_map):
                 try:
                     job = fut.result()

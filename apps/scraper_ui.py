@@ -539,7 +539,7 @@ with tab4:
                 context = browser.new_context()
                 page = context.new_page()
                 page.goto(login_url or "https://itviec.com/viec-lam-it", timeout=60000)
-                st.session_state["_pw"] = {"pw": pw, "browser": browser, "context": context, "page": page}
+                st.session_state["_pw"] = {"pw": pw, "browser": browser, "context": context, "page": page, "site": sel_site}
                 st.success("Browser đã mở. Đăng nhập trong browser, rồi bấm 'Lưu session'.")
             except Exception as e:
                 st.error(f"Lỗi mở browser: {e}")
@@ -559,9 +559,10 @@ with tab4:
             if pw_state:
                 try:
                     state = pw_state["context"].storage_state()
-                    am.save_storage_state(sel_site, state)
+                    save_site = pw_state.get("site", sel_site)
+                    am.save_storage_state(save_site, state)
                     _close_browser()
-                    st.success(f"Đã lưu session {sel_site}")
+                    st.success(f"Đã lưu session {save_site}")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Lỗi lưu: {e}")

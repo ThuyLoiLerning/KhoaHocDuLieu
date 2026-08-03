@@ -1,12 +1,10 @@
 """PlaywrightCrawler — render trang đã login, trích sections."""
 
 import os, logging, re, unicodedata
-from typing import Optional, Dict
+from typing import Optional
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
-
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 
 
 def _slugify(text: str) -> str:
@@ -18,15 +16,6 @@ def _slugify(text: str) -> str:
 
 class PlaywrightCrawler:
     """Render HTML qua Playwright (JS + login), trích sections."""
-
-    SITE_SELECTORS = {
-        "itviec": {
-            "mo_ta": ["[class*='job-description']", "[class*='description']", "div.job-content"],
-            "yeu_cau": ["[class*='requirement']", "[class*='skill']", "[class*='job-requirement']"],
-            "phuc_loi": ["[class*='benefit']", "[class*='welfare']"],
-            "luong": ["[class*='salary']", "[class*='money']", "[class*='luong']"],
-        },
-    }
 
     def __init__(self, auth_manager=None):
         from src.data.auth_manager import AuthManager
