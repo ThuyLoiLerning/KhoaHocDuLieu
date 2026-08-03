@@ -148,6 +148,22 @@ SITE_CONFIGS = [
         },
     },
     {
+        "name": "topcv",
+        "label": "TopCV.vn",
+        "enabled": True,
+        "base_url": "https://www.topcv.vn",
+        "methods": [METHOD_HTML],
+        "keywords": ["backend-developer", "frontend-developer", "data-engineer", "devops-engineer", "tester"],
+        "search_url": "/tim-viec-lam-{keyword}-tai-ho-chi-minh-kl2cr257cb258",
+        "max_pages": -1,
+        "cities": ["HCMC", "Hanoi", "Da Nang", "Can Tho"],
+        "delay": (0.5, 1.0),
+        "selectors": {
+            "html_list": "div.job-item-search-result",
+            "detail_url": "a[href*='/viec-lam/']",
+        },
+    },
+    {
         "name": "vieclam24h",
         "label": "ViecLam24h.vn",
         "enabled": True,

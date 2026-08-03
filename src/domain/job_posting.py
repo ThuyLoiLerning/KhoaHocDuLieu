@@ -49,6 +49,7 @@ class JobPosting:
     remote_option: str = "On-site"
     salary_min: Optional[float] = None
     salary_max: Optional[float] = None
+    salary_raw: str = ""          # 🆕 lương gốc chưa parse (vd "8 Tr - 12 Tr VND")
     salary_hidden: bool = False
     has_english: bool = False
     working_hours: str = ""                   # 🆕 giờ làm việc
@@ -183,6 +184,7 @@ class JobPosting:
             "remote_option": self.remote_option,
             "salary_min": self.salary_min,
             "salary_max": self.salary_max,
+            "salary_raw": self.salary_raw,
             "salary_hidden": self.salary_hidden,
             "has_english": self.has_english,
             "salary_mid": self.salary_mid,
@@ -237,6 +239,7 @@ class JobPosting:
             remote_option=data.get("remote_option", "On-site"),
             salary_min=float(data["salary_min"]) if data.get("salary_min") else None,
             salary_max=float(data["salary_max"]) if data.get("salary_max") else None,
+            salary_raw=data.get("salary_raw", ""),
             salary_hidden=data.get("salary_hidden", False),
             has_english=data.get("has_english", False),
             posted_at=posted_at,

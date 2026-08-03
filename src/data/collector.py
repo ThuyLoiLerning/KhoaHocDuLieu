@@ -587,11 +587,26 @@ def normalize_city(city_raw: str) -> str:
         "tp.hcm": "HCMC", "tp hcm": "HCMC", "thành phố hồ chí minh": "HCMC",
         "hanoi": "Hanoi", "hà nội": "Hanoi", "ha noi": "Hanoi",
         "da nang": "Da Nang", "đà nẵng": "Da Nang", "danang": "Da Nang",
+        "cần thơ": "Can Tho", "can tho": "Can Tho", "cantho": "Can Tho",
     }
 
     for key, val in city_map.items():
         if key in city_lower:
             return val
+
+    # Loại bỏ giá trị rác: "Bình Dương Đồng Nai", "Quận Tân Bình", "not available", "khac"
+    if any(bad in city_lower for bad in ["quận", "huyện", "phường", "ward", "district", "other",
+                                          "khac", "náidea", "not available", "unknown", "toàn quốc",
+                                          "toan quoc", "khu vực", "khu vuc", "toàn đất nước"]):
+        return "Unknown"
+    # Phát hiện giá trị gộp nhiều tỉnh (chứa dấu liệt kê kép, ~2+ tỉnh khác nhau)
+    # Nếu chứa nhiều hơn 1 tỉnh trong chuỗi dài, map sang HCMC/Unknown tùy ngữ cảnh — mặc định Unknown
+    if len(city_raw) > 15 and any(t in city_lower for t in ["binh duong", "dong nai", "long an", "ba ria",
+                                                               "hai phong", "bac ninh", "quang ninh",
+                                                               "thanh hoa", "nghe an", "gia lai", "ca mau",
+                                                               "kien giang", "lam dong", "vung tau"]):
+        # City là tổ hợp — khó map, trả Unknown
+        return "Unknown"
 
     # Default: title case
     return city_raw.title()
@@ -1365,18 +1380,81 @@ def parse_glints_hit(hit: dict) -> Optional[Dict]:
             company = co
         location = hit.get("location") or hit.get("city") or hit.get("address") or ""
         if isinstance(location, dict):
-            location = location.get("name", "")
+            # Glints: parents[0] = TP cha (vd "Thành phố Hồ Chí Minh")
+            loc_parents = location.get("parents") or []
+            if isinstance(loc_parents, list) and loc_parents and isinstance(loc_parents[0], dict):
+                location = loc_parents[0].get("name", "") or location.get("name", "")
+            else:
+                location = location.get("name", "")
         salary = hit.get("salary") or hit.get("salary_raw") or ""
+        # Glints: salaries là list các mức lương (mới nhất)
+        if not salary and isinstance(hit.get("salaries"), list) and hit["salaries"]:
+            salary = hit["salaries"][-1]
+        salary_raw = ""
+        salary_min, salary_max = None, None
+        if isinstance(salary, dict):
+            # Glints JobSalary: {minAmount, maxAmount, CurrencyCode}
+            smin = salary.get("minAmount")
+            smax = salary.get("maxAmount")
+            if smin or smax:
+                if salary.get("CurrencyCode") == "VND" or salary.get("currency") == "VND":
+                    salary_min = smin / 1_000_000 if smin else None
+                    salary_max = smax / 1_000_000 if smax else None
+                else:
+                    salary_min = smin / 1_000_000 if smin else None
+                    salary_max = smax / 1_000_000 if smax else None
+                salary_raw = f"{salary_min}-{salary_max} triệu" if (salary_min or salary_max) else ""
+        elif isinstance(salary, str) and salary:
+            salary_raw = salary
+        elif isinstance(salary, (int, float)) and salary > 0:
+            salary_raw = str(salary)
         url = hit.get("url") or hit.get("slug") or hit.get("id") or ""
         if url and not url.startswith("http"):
             url = "https://glints.com" + url
         job_id = generate_job_id("glints", url or title)
+        # Skills từ listing (glints có sẵn skills trong jobsInPage)
+        # Skills từ listing (glints có sẵn skills trong jobsInPage)
+        skills_raw = hit.get("skills") or []
+        if isinstance(skills_raw, str):
+            skills_raw = [skills_raw]
+        elif skills_raw:
+            out = []
+            for s in skills_raw:
+                if isinstance(s, dict):
+                    # Glints: {"skill": {"name": "..."}, "mustHave": True}
+                    inner = s.get("skill", s)
+                    if isinstance(inner, dict):
+                        out.append(inner.get("name", str(s)))
+                    else:
+                        out.append(str(inner).replace("{", "").replace("}", ""))
+                else:
+                    out.append(str(s))
+            skills_raw = [x for x in out if x and "Skill" not in x and "{" not in x]
+        # Experience từ minYearsOfExperience/maxYearsOfExperience (glints)
+        exp = None
+        exp_min = hit.get("minYearsOfExperience")
+        exp_max = hit.get("maxYearsOfExperience")
+        if exp_min is not None or exp_max is not None:
+            if exp_min is not None and exp_max is not None:
+                exp = float((exp_min + exp_max) / 2)
+            elif exp_min is not None:
+                exp = float(exp_min)
+            elif exp_max is not None:
+                exp = float(exp_max)
+        else:
+            lvl = hit.get("seniorityLevel") or hit.get("expDescription") or hit.get("experienceLevel") or ""
+            if isinstance(lvl, str) and lvl:
+                m = re.search(r"(\d+)\s*(?:年|năm|years|yrs|y)?", lvl)
+                if m:
+                    try: exp = float(m.group(1))
+                    except: pass
         return {
             "job_id": job_id, "job_title": title,
             "company_name": company if company else "Unknown",
             "city": normalize_city(str(location)),
-            "salary_raw": str(salary) if salary else "",
-            "skills_raw": [], "experience_years": None,
+            "salary_raw": salary_raw,
+            "salary_min": salary_min, "salary_max": salary_max,
+            "skills_raw": skills_raw, "experience_years": exp,
             "education_level": "Not specified", "job_type": "Full-time",
             "remote_option": extract_remote_option(str(location), ""),
             "has_english": False, "posted_at": hit.get("posted_at") or hit.get("created_at") or "",
@@ -1594,14 +1672,28 @@ def run_all_scrapers(
     except ImportError:
         pass
 
+    # Per-site page/keyword limits: itviec rate-limit nghiêm ngặt → ít hơn
+    site_page_limit = {
+        "itviec": 2,          # rate limit mạnh, detail crawl chậm
+        "vieclam24h": 2,
+        "topdev": 2,
+    }
+    site_kw_limit = {
+        "itviec": 4,          # 4 keywords × 2 pages × 20 jobs = 160 jobs (tránh timeout)
+        "vieclam24h": 3,
+        "topdev": 2,
+        "linkedin": 6,        # 6 keywords × 3 pages × 10 = 180 jobs (data kém, không detail)
+    }
     n_sites = len(scrapers)
     for site_idx, (name, scraper_func) in enumerate(scrapers, start=1):
         _prog(name, "", len(all_jobs), f"━━━ [Site {site_idx}/{n_sites}] {name} — BAT DAU crawl ━━━")
-        n_kw = len(keywords)
-        for kw_idx, kw in enumerate(keywords, start=1):
+        pages_for_site = site_page_limit.get(name, max_pages_per_site)
+        kw_limit = site_kw_limit.get(name, len(keywords))
+        n_kw = min(len(keywords), kw_limit)
+        for kw_idx, kw in enumerate(keywords[:kw_limit], start=1):
             try:
                 _prog(name, kw, len(all_jobs), f"  [{site_idx}/{n_sites}] {name} | keyword {kw_idx}/{n_kw}: '{kw}' ...")
-                jobs = scraper_func(keyword=kw, max_pages=max_pages_per_site)
+                jobs = scraper_func(keyword=kw, max_pages=pages_for_site)
                 all_jobs.extend(jobs)
                 _prog(name, kw, len(all_jobs), f"  [{site_idx}/{n_sites}] {name} | keyword {kw_idx}/{n_kw}: '{kw}' — {len(jobs)} jobs (tổng: {len(all_jobs)})")
             except Exception as e:
@@ -1725,17 +1817,22 @@ def run_real_scrapers(
     use_fallback: bool = False,
     progress_file: Optional[str] = None,
 ) -> Dict[str, List[Dict]]:
-    """Run full pipeline: old scrapers (listing data) → DetailCrawler enhance.
+    """Run full pipeline — ưu tiên site có salary/data đầy đủ.
 
     Strategy:
-      1. Run proven old scrapers to get base job data from listing pages
-      2. For each job with source_url, crawl detail page to enhance fields
-      3. Merge: detail fields override listing fields where available
-      4. No fallback by default
+      1. Careerviet: crawl FULL pages (100) — listing card có salary, nhanh
+      2. Topcv: crawl từng keyword — listing card có salary
+      3. itviec: listing JSON-LD + detail (rate limit, giới hạn)
+      4. glints: listing NEXT_DATA (có skills/exp)
+      5. Bỏ linkedin (detail chặn, data kém)
+      6. No fallback by default
     """
     import json as _json, os as _os
+    from src.config.scraper_config import SITE_CONFIGS, get_site
 
     def _prog(site, kw, n, detail=""):
+        if detail:
+            print(detail, flush=True)
         if progress_file:
             try:
                 with open(progress_file, "w", encoding="utf-8") as f:
@@ -1743,102 +1840,98 @@ def run_real_scrapers(
             except:
                 pass
 
-    # STEP 1: Run old scrapers + config sites (listing-level data)
-    _prog("pipeline", "", 0, "Bat dau crawl listing data tu old scrapers...")
-    result = run_all_scrapers(
-        keywords=keywords or ["python", "java", "javascript", "react", "data", "devops"],
-        max_pages_per_site=max(1, max_pages_per_site if max_pages_per_site > 0 else 3),
-        min_total_jobs=0,  # Don't fallback here
-        use_fallback=False,
-        progress_file=progress_file,
-    )
-    base_jobs = result["jobs"]
-    base_skills = result["skills"]
-    base_companies = result["companies"]
-    _prog("pipeline", "", len(base_jobs), f"Step 1 done: {len(base_jobs)} jobs from listing")
+    all_jobs = []
 
-    if not base_jobs:
-        logger.warning("[RealScrapers] No jobs crawled")
-        return {"jobs": [], "skills": [], "companies": []}
+    # ===== 1. CAREERVIET — nguồn chính, crawl full pages =====
+    cv = get_site("careerviet")
+    if cv and cv.get("enabled", True):
+        cv_kws = ["it", "cntt", "phan-mem", "lap-trinh", "cong-nghe-thong-tin", "dev"]
+        for kw in cv_kws:
+            _prog("careerviet", kw, len(all_jobs), f"careerviet/{kw}: crawling...")
+            jobs = _run_config_scraper(cv, keyword=kw, max_pages=40)
+            all_jobs.extend(jobs)
+            _prog("careerviet", kw, len(all_jobs), f"careerviet/{kw}: +{len(jobs)} (tong {len(all_jobs)})")
 
-    # STEP 2: Enhance with DetailCrawler (crawl detail pages)
+    # ===== 2. TOPCV — listing card có salary =====
+    tc = get_site("topcv")
+    if tc and tc.get("enabled", True):
+        tc_kws = tc.get("keywords", ["backend-developer", "frontend-developer", "data-engineer"])
+        for kw in tc_kws:
+            _prog("topcv", kw, len(all_jobs), f"topcv/{kw}: crawling...")
+            jobs = _run_config_scraper(tc, keyword=kw, max_pages=10)
+            all_jobs.extend(jobs)
+            _prog("topcv", kw, len(all_jobs), f"topcv/{kw}: +{len(jobs)} (tong {len(all_jobs)})")
+
+    # ===== 3. ITVIEC — listing + detail (rate limit, giới hạn) =====
+    it_kws = (keywords or ["python", "java", "react", "data", "javascript", "fullstack"])[:6]
+    for kw in it_kws:
+        _prog("itviec", kw, len(all_jobs), f"itviec/{kw}: crawling...")
+        try:
+            jobs = scrape_itviec_jsonld(keyword=kw, max_pages=2)
+            all_jobs.extend(jobs)
+            _prog("itviec", kw, len(all_jobs), f"itviec/{kw}: +{len(jobs)} (tong {len(all_jobs)})")
+        except Exception as e:
+            _prog("itviec", kw, len(all_jobs), f"itviec/{kw}: LOI {e}")
+
+    # ===== 4. GLINTS — listing NEXT_DATA =====
+    gl_kws = ["Software Developer", "Data Analyst", "Frontend Developer", "Backend Developer",
+              "Data Scientist", "DevOps Engineer", "Python", "Java", "React", "Mobile Developer"][:8]
+    for kw in gl_kws:
+        _prog("glints", kw, len(all_jobs), f"glints/{kw}: crawling...")
+        try:
+            jobs = scrape_glints(keyword=kw, max_pages=3)
+            all_jobs.extend(jobs)
+            _prog("glints", kw, len(all_jobs), f"glints/{kw}: +{len(jobs)} (tong {len(all_jobs)})")
+        except Exception as e:
+            _prog("glints", kw, len(all_jobs), f"glints/{kw}: LOI {e}")
+
+    # ===== 5. Detail-enhance: careerviet, itviec, glints (lấy skills/exp từ detail) =====
+    _prog("pipeline", "", 0, "Detail-enhance careerviet/itviec/glints...")
     from src.data.detail_crawler import DetailCrawler, normalize_to_job_dict
-
-    crawler = DetailCrawler(max_workers=2, delay_range=(0.5, 1.0))
-
-    ALLOWED_CITIES = {"HCMC", "Hanoi", "Da Nang", "Can Tho"}
-    enhanced_jobs = []
-
-    # Group jobs by site for detail crawling
+    crawler = DetailCrawler(max_workers=2, delay_range=(1.0, 2.0))
+    ENHANCE_SITES = {"itviec", "glints"}  # Bỏ careerviet/topcv — đã có salary, detail chậm
     from collections import defaultdict
     by_site = defaultdict(list)
-    for job in base_jobs:
+    for job in all_jobs:
         by_site[job.get("source_site", "unknown")].append(job)
-
+    enhanced_all = []
     for site_name, site_jobs in by_site.items():
-        _prog(site_name, "", len(enhanced_jobs), f"Dang enhance {site_name} ({len(site_jobs)} jobs)...")
-        n_enhanced = 0
-        urls = [j.get("source_url", "") for j in site_jobs if j.get("source_url")]
-        # Dedup URLs
-        seen_urls = set()
-        unique_urls = []
-        for u in urls:
-            if u and u not in seen_urls:
-                seen_urls.add(u)
-                unique_urls.append(u)
-
-        # Crawl detail pages
-        detail_jobs = crawler.crawl_many(unique_urls, site_name)
-        detail_map = {}
-        for dj in detail_jobs:
-            detail_map[dj.get("source_url", "")] = dj
-
-        # Merge
+        if site_name not in ENHANCE_SITES:
+            enhanced_all.extend(site_jobs)
+            continue
+        _prog(site_name, "", len(enhanced_all), f"Enhance {site_name} ({len(site_jobs)} jobs)...")
+        urls = list(dict.fromkeys(j.get("source_url","") for j in site_jobs if j.get("source_url")))
+        detail_jobs = crawler.crawl_many(urls, site_name)
+        detail_map = {d.get("source_url",""): d for d in detail_jobs}
         for job in site_jobs:
-            url = job.get("source_url", "")
-            detail = detail_map.get(url, {})
-
-            # City filter
-            city = detail.get("city") or job.get("city", "")
-            if city not in ALLOWED_CITIES and city != "Unknown":
-                continue
-
-            merged = dict(job)  # Start with base
-
-            # Enhance with detail fields (only overwrite empty values)
-            enhance_fields = [
-                "city", "salary_min", "salary_max", "salary_raw", "salary_hidden",
-                "experience_years", "education_level", "job_type", "remote_option",
-                "has_english", "skills_raw", "description_raw",
-                "posted_at", "expired_at", "benefits", "working_hours",
-                "contract_type", "job_level", "num_hiring",
-            ]
-            for f in enhance_fields:
+            merged = dict(job)
+            detail = detail_map.get(job.get("source_url",""), {})
+            for f in ["salary_min","salary_max","salary_raw","salary_hidden","experience_years",
+                      "education_level","job_type","remote_option","has_english","skills_raw",
+                      "description_raw","posted_at","expired_at","benefits","working_hours",
+                      "contract_type","job_level","num_hiring","city"]:
                 dv = detail.get(f)
                 if dv is not None and dv != "" and dv != []:
                     merged[f] = dv
-
-            # Ensure description from detail if we have it
-            if detail.get("description_raw") and len(str(detail.get("description_raw", ""))) > len(str(merged.get("description_raw", ""))):
+            if detail.get("description_raw") and len(str(detail.get("description_raw",""))) > len(str(merged.get("description_raw",""))):
                 merged["description_raw"] = detail["description_raw"]
+            enhanced_all.append(merged)
+    all_jobs = enhanced_all
 
-            enhanced_jobs.append(merged)
-            n_enhanced += 1
-
-        _prog(site_name, "", len(enhanced_jobs), f"{site_name}: {n_enhanced}/{len(site_jobs)} enhanced")
-
-    # Final dedup
+    # ===== Dedup =====
     seen = set()
     unique_jobs = []
-    for job in enhanced_jobs:
+    for job in all_jobs:
         jid = job.get("job_id", "")
         if jid and jid not in seen:
             seen.add(jid)
             unique_jobs.append(job)
+        elif not jid:
+            unique_jobs.append(job)
 
-    logger.info(f"[RealScrapers] After enhance + dedup: {len(unique_jobs)} jobs")
+    logger.info(f"[RealScrapers] After dedup: {len(unique_jobs)} jobs")
 
-    # Check minimum — fallback if needed
+    # ===== Check minimum — fallback if needed =====
     if len(unique_jobs) < min_total_jobs:
         msg = f"Only {len(unique_jobs)} real jobs crawled, target {min_total_jobs}"
         if use_fallback:
@@ -1846,12 +1939,19 @@ def run_real_scrapers(
             logger.warning(f"{msg} — generating {needed} fallback records")
             fallback = generate_fallback_data(needed)
             unique_jobs.extend(fallback["jobs"])
-            base_skills.extend(fallback.get("skills", []))
-            base_companies.extend(fallback.get("companies", []))
+            base_skills = fallback.get("skills", [])
+            base_companies = fallback.get("companies", [])
         else:
             logger.warning(msg)
+            base_skills = []
+            base_companies = []
+            return {"jobs": unique_jobs, "skills": [], "companies": [],
+                    "warning": f"Only {len(unique_jobs)} jobs — target was {min_total_jobs}"}
+    else:
+        base_skills = []
+        base_companies = []
 
-    # Build final skills/companies
+    # ===== Build final skills/companies =====
     all_skills = list(base_skills)
     for job in unique_jobs:
         for skill in job.get("skills_raw", []):

@@ -323,7 +323,13 @@ def html_handler(site: dict, keyword: str, max_pages: int = 3) -> List[Dict]:
                 break
 
             for card in cards[:30]:
-                title_el = card.select_one("h2 a, h3 a, a[class*='title'], a[href*='job'], a[href*='viec']")
+                # Ưu tiên link có text (title), bỏ qua link avatar (text rỗng)
+                detail_sel = sel.get("detail_url", "a[href*='job'], a[href*='viec'], a[href*='tuyen'], h2 a, h3 a")
+                title_el = None
+                for cand in card.select(detail_sel):
+                    if cand.get_text(strip=True):
+                        title_el = cand
+                        break
                 if not title_el:
                     if card.name == 'a' and card.get('href'):
                         title_el = card
@@ -339,8 +345,16 @@ def html_handler(site: dict, keyword: str, max_pages: int = 3) -> List[Dict]:
                 company = company_el.get_text(strip=True) if company_el else "Unknown"
                 loc_el = card.select_one("span[class*='location'], div[class*='location'], span[class*='address']")
                 location = loc_el.get_text(strip=True) if loc_el else ""
-                sal_el = card.select_one("span[class*='salary'], div[class*='salary']")
+                sal_el = card.select_one("span[class*='salary'], div[class*='salary'], p[class*='salary'], div[class*='label-content'] span")
                 salary = sal_el.get_text(strip=True) if sal_el else ""
+                if not salary:
+                    # Fallback: trích từ card text (vd careerviet "Lương : 8 Tr - 12 Tr VND")
+                    card_text = card.get_text(" ", strip=True)
+                    m = re.search(r'[Ll]ương\s*[:：]?\s*([^Hhạn]{3,45})', card_text)
+                    if m:
+                        salary = m.group(1).strip()
+                        # Cắt bỏ trailing text không phải lương
+                        salary = re.split(r'\s{2,}|Hạn|Cập nhật', salary)[0].strip()
                 skills = [s.get_text(strip=True) for s in card.select("span[class*='tag'], a[class*='tag']")]
                 jobs.append({
                     "job_id": _job_id(site["name"], url_job or title),

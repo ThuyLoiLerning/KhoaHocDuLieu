@@ -51,7 +51,7 @@ class ParsedSalary:
 
 # Hidden salary keywords
 HIDDEN_KEYWORDS = [
-    r"cạnh tranh", r"thỏa thuận", r"thoa thuan", r"negotiable",
+    r"cạnh tranh", r"thỏa thuận", r"thoả thuận", r"thoa thuan", r"thỏa thuận", r"negotiable",
     r"face.?to.?face", r"f2f", r"liên hệ", r"lien he", r"contact",
     r"đề xuất", r"de xuat", r"theo năng lực", r"theo nang luc",
     r"tùy kinh nghiệm", r"tuy kinh nghiem", r"based on experience",
@@ -136,6 +136,24 @@ PATTERNS = [
         ),
         "groups": ("min", "max", "unit"),
     },
+    # Range lặp unit: "8 Tr - 12 Tr VND", "50 Tr - 60 Tr VND", "20tr - 30tr"
+    {
+        "type": SalaryType.RANGE,
+        "regex": re.compile(
+            r"(?:từ\s*)?(?P<min>\d[\d.,]*)\s*(?P<unit1>triệu|tr|trieu|m|million|nghìn|nghin|k|ngàn|ngan|usd|đ)\s*[-–—]\s*(?P<max>\d[\d.,]*)\s*(?P<unit2>triệu|tr|trieu|m|million|nghìn|nghin|k|ngàn|ngan|usd|đ)?\s*(?:vnd|vnđ)?\s*(?:/tháng|/thang|/month)?",
+            re.IGNORECASE
+        ),
+        "groups": ("min", "max", "unit1", "unit2"),
+    },
+    # Trên/Dưới X Tr VND: "Trên 25 Tr VND", "Trên 15 Tr", "Under 10tr"
+    {
+        "type": SalaryType.FROM,
+        "regex": re.compile(
+            r"(?:trên|tren|hơn|hon|from|trên\s*23|over)\s*(?P<min>\d[\d.,]*)\s*(?P<unit>triệu|tr|trieu|m|million|usd)?\s*(?:vnd|vnđ)?",
+            re.IGNORECASE
+        ),
+        "groups": ("min", "unit"),
+    },
 
     # Up to: "tới 20 triệu", "đến 20 triệu", "tối đa 20 triệu", "max 20 triệu"
     {
@@ -173,14 +191,11 @@ def parse_number(num_str: str) -> float:
     """Parse số có thể có dấu phẩy/thập phân: '10', '10.5', '10,5', '1,000'."""
     if not num_str:
         return 0.0
-    # Replace comma with dot for decimal, remove thousand separators
-    cleaned = num_str.replace(",", ".")
-    # Handle cases like "1.000" (thousand separator) vs "1.5" (decimal)
-    # If multiple dots, assume first are thousand separators
-    parts = cleaned.split(".")
-    if len(parts) > 2:
-        # Multiple dots - treat as thousand separators
-        cleaned = "".join(parts)
+    cleaned = num_str.replace(",", "")
+    # Handle "1.000" (thousand sep) vs "1.5" (decimal)
+    # If pattern \d{1,3}\.\d{3} → thousand separator; else decimal dot
+    if re.match(r'^\d{1,3}\.\d{3}$', cleaned):
+        cleaned = cleaned.replace(".", "")
     try:
         return float(cleaned)
     except ValueError:
@@ -280,6 +295,29 @@ def parse_salary(salary_text: str) -> ParsedSalary:
                     )
 
             elif salary_type == SalaryType.RANGE:
+                if "unit1" in match.groupdict() and match.group("unit1"):
+                    # Range lặp unit: "8 Tr - 12 Tr VND"
+                    min_unit = match.group("unit1")
+                    max_unit = match.group("unit2") or min_unit
+                    is_usd = "usd" in min_unit.lower() or "usd" in max_unit.lower()
+                    min_val = parse_number(match.group("min"))
+                    max_val = parse_number(match.group("max"))
+                    if is_usd:
+                        min_val = min_val * USD_TO_VND_RATE / 1_000_000
+                        max_val = max_val * USD_TO_VND_RATE / 1_000_000
+                    else:
+                        min_val *= get_unit_multiplier(min_unit)
+                        max_val *= get_unit_multiplier(max_unit)
+                    if min_val > max_val:
+                        min_val, max_val = max_val, min_val
+                    return ParsedSalary(
+                        salary_min=round(min_val, 1),
+                        salary_max=round(max_val, 1),
+                        salary_mid=round((min_val + max_val) / 2, 1),
+                        original_text=original,
+                        salary_type=salary_type,
+                        confidence=0.9,
+                    )
                 min_val = parse_number(match.group("min")) * get_unit_multiplier(match.group("unit"))
                 max_val = parse_number(match.group("max")) * get_unit_multiplier(match.group("unit"))
                 # Ensure min <= max

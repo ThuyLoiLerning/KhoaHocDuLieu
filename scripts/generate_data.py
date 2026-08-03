@@ -144,6 +144,16 @@ if has_both.any():
         jobs_df.loc[has_both, "salary_min"] + jobs_df.loc[has_both, "salary_max"]
     ) / 2
     print(f"  Filled salary_mid for {has_both.sum()} rows from min/max")
+
+# Lọc salary outlier (giá trị bất hợp lý > 1000 triệu = 1 tỷ, hoặc < 1 triệu)
+for col in ["salary_min", "salary_max", "salary_mid"]:
+    if col in jobs_df.columns:
+        n_before = jobs_df[col].notna().sum()
+        jobs_df.loc[jobs_df[col] > 1000, col] = None
+        jobs_df.loc[jobs_df[col] < 1, col] = None
+        n_after = jobs_df[col].notna().sum()
+        if n_before != n_after:
+            print(f"  {col}: loại {n_before - n_after} outlier (>1000 tr hoặc <1 tr)")
 print("\n" + "=" * 60)
 print("STEP 5: Inject dirty data (A8)")
 print("=" * 60)
