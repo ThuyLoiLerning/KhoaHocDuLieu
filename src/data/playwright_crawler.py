@@ -30,7 +30,16 @@ class PlaywrightCrawler:
             return
         from playwright.sync_api import sync_playwright
         self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch(headless=True)
+        # Ưu tiên browser default (Chrome/Edge cài sẵn) — fallback chromium headless
+        self._browser = None
+        for channel in ["chrome", "msedge"]:
+            try:
+                self._browser = self._playwright.chromium.launch(headless=True, channel=channel)
+                break
+            except Exception:
+                continue
+        if self._browser is None:
+            self._browser = self._playwright.chromium.launch(headless=True)
         state = self.auth.get_storage_state(site) if self.auth.has_session(site) else None
         if state:
             self._context = self._browser.new_context(storage_state=state)

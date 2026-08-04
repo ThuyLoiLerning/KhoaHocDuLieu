@@ -535,7 +535,16 @@ with tab4:
                 # Reuse auth logic qua PlaywrightCrawler mở browser headless=False
                 from playwright.sync_api import sync_playwright
                 pw = sync_playwright().start()
-                browser = pw.chromium.launch(headless=False)
+                # Ưu tiên browser default (Chrome/Edge) — fallback chromium
+                browser = None
+                for channel in ["chrome", "msedge"]:
+                    try:
+                        browser = pw.chromium.launch(headless=False, channel=channel)
+                        break
+                    except Exception:
+                        continue
+                if browser is None:
+                    browser = pw.chromium.launch(headless=False)
                 context = browser.new_context()
                 page = context.new_page()
                 page.goto(login_url or "https://itviec.com/viec-lam-it", timeout=60000)
