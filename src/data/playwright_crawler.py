@@ -31,21 +31,7 @@ class PlaywrightCrawler:
         from playwright.sync_api import sync_playwright
         self._playwright = sync_playwright().start()
 
-        # 1. Ưu tiên profile Edge hiện tại (chứa login sẵn) — persistent context
-        profile = self._find_edge_profile()
-        if profile:
-            try:
-                self._context = self._playwright.chromium.launch_persistent_context(
-                    profile,
-                    channel="msedge",
-                    headless=True,
-                )
-                self._browser = None  # persistent context trả về context, không phải browser
-                return
-            except Exception as e:
-                logger.warning(f"[PlaywrightCrawler] Edge profile fail (có thể đang mở): {e}")
-
-        # 2. Fallback: browser mới + storage_state đã lưu
+        # Browser mới (Edge/Chrome cài sẵn) + storage_state đã lưu từ login thủ công
         self._browser = None
         for channel in ["msedge", "chrome"]:
             try:
@@ -60,20 +46,6 @@ class PlaywrightCrawler:
             self._context = self._browser.new_context(storage_state=state)
         else:
             self._context = self._browser.new_context()
-
-    @staticmethod
-    def _find_edge_profile() -> Optional[str]:
-        """Tìm profile Edge đang dùng (có cookies login sẵn)."""
-        import os
-        local = os.environ.get("LOCALAPPDATA", "")
-        candidates = [
-            os.path.join(local, "Microsoft", "Edge", "User Data", "Default"),
-            os.path.join(local, "Google", "Chrome", "User Data", "Default"),
-        ]
-        for p in candidates:
-            if os.path.exists(os.path.join(p, "Network", "Cookies")) or os.path.exists(os.path.join(p, "Cookies")):
-                return p
-        return None
 
     def render(self, url: str, site: str) -> Optional[str]:
         """Render URL → full HTML sau JS + login."""
