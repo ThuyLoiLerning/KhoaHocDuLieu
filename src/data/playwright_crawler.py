@@ -30,9 +30,9 @@ class PlaywrightCrawler:
             return
         from playwright.sync_api import sync_playwright
         self._playwright = sync_playwright().start()
-        # Ưu tiên browser default (Chrome/Edge cài sẵn) — fallback chromium headless
+        # Ưu tiên browser default (Edge/Chrome cài sẵn) — fallback chromium headless
         self._browser = None
-        for channel in ["chrome", "msedge"]:
+        for channel in ["msedge", "chrome"]:
             try:
                 self._browser = self._playwright.chromium.launch(headless=True, channel=channel)
                 break

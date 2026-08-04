@@ -535,9 +535,9 @@ with tab4:
                 # Reuse auth logic qua PlaywrightCrawler mở browser headless=False
                 from playwright.sync_api import sync_playwright
                 pw = sync_playwright().start()
-                # Ưu tiên browser default (Chrome/Edge) — fallback chromium
+                # Ưu tiên browser default (Edge/Chrome) — fallback chromium
                 browser = None
-                for channel in ["chrome", "msedge"]:
+                for channel in ["msedge", "chrome"]:
                     try:
                         browser = pw.chromium.launch(headless=False, channel=channel)
                         break
