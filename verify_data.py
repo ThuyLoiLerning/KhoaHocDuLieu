@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-df = pd.read_parquet('data/processed/combined_20260720_205842.parquet')
+df = pd.read_csv('data/processed/combined.csv')
 
 print("=== CHECKLIST VERIFICATION ===")
 print()
