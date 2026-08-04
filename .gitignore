@@ -46,3 +46,6 @@ Thumbs.db
 reports/*.pdf
 reports/*.pptx
 reports/*.docx
+
+# Temp test artifacts
+tmp_test/
