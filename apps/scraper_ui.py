@@ -549,9 +549,13 @@ with tab4:
                 if browser is None:
                     browser = pw.chromium.launch(headless=False)
                 context = browser.new_context()
+                # Cho phép popup (Google Auth mở cửa sổ mới — bắt để không bị chặn)
+                _popups = []
+                context.on("page", lambda p: _popups.append(p))
                 page = context.new_page()
                 page.goto(login_url or "https://itviec.com/viec-lam-it", timeout=60000)
                 st.session_state["_pw"] = {"pw": pw, "browser": browser, "context": context, "page": page, "site": sel_site}
+                st.session_state["_popups"] = _popups
                 st.success("Browser đã mở. Đăng nhập trong browser, rồi bấm 'Lưu session'.")
             except Exception as e:
                 st.error(f"Lỗi mở browser: {e}")
