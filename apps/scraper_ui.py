@@ -523,7 +523,10 @@ with tab4:
     st.divider()
     st.subheader("Đăng nhập mới")
     sel_site = st.selectbox("Chọn site", site_names)
-    login_url = st.text_input("URL đăng nhập", value="https://itviec.com/viec-lam-it" if sel_site == "itviec" else "")
+    # Default login URL từ config (base_url + search_url)
+    _sel_cfg = next((s for s in SITE_CONFIGS if s["name"] == sel_site), {})
+    _default_url = (_sel_cfg.get("base_url", "") + _sel_cfg.get("search_url", "").split("?")[0]).replace("{keyword}", "it").replace("{page}", "1")
+    login_url = st.text_input("URL đăng nhập", value=_default_url)
     col1, col2 = st.columns(2)
     with col1:
         if st.button("Mở browser đăng nhập", key="open_login"):
