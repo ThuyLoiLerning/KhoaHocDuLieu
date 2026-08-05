@@ -89,3 +89,52 @@ def test_run_crawl_raises_below_threshold(tmp_path, monkeypatch):
 
     with pytest.raises(RuntimeError, match="below threshold"):
         run_crawl(["itviec"], ["python"], 1, min_total_jobs=1)
+
+
+def test_run_crawl_below_threshold_writes_no_csv(tmp_path, monkeypatch):
+    """Fetched data not silently dropped on threshold breach — CSV untouched,
+    data available in exception."""
+    monkeypatch.setattr(pipeline, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(pipeline, "PROCESSED_DIR", tmp_path / "data" / "processed")
+    monkeypatch.setattr(pipeline, "HISTORY_DIR", tmp_path / "logs" / "crawl_history")
+    monkeypatch.setattr(pipeline, "OUTPUT_CSV", tmp_path / "data" / "processed" / "combined.csv")
+
+    def fake_fetch_site(site_name, keyword, max_pages, client=None):
+        return [
+            {
+                "job_id": f"itviec_1",
+                "job_title": "Backend Developer",
+                "company_name": "FPT",
+                "city": "HCMC",
+                "source_site": site_name,
+                "source_url": "https://example.test/itviec/1",
+                "salary_raw": "10-15 triệu",
+                "description_raw": "Python Django",
+                "skills_raw": ["Python"],
+            }
+        ]
+
+    monkeypatch.setattr(pipeline, "fetch_site", fake_fetch_site)
+    monkeypatch.setattr(pipeline, "normalize_raw_jobs", pipeline.normalize_raw_jobs)
+
+    with pytest.raises(RuntimeError, match="below threshold"):
+        run_crawl(["itviec"], ["python"], 1, min_total_jobs=2)
+
+    # No CSV written — existing data not clobbered
+    assert not (tmp_path / "data" / "processed" / "combined.csv").exists()
+
+
+def test_run_crawl_raises_on_fetch_error(tmp_path, monkeypatch):
+    """Per-site fetch failure must fail loudly, not silently produce 0 jobs."""
+    monkeypatch.setattr(pipeline, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(pipeline, "PROCESSED_DIR", tmp_path / "data" / "processed")
+    monkeypatch.setattr(pipeline, "HISTORY_DIR", tmp_path / "logs" / "crawl_history")
+    monkeypatch.setattr(pipeline, "OUTPUT_CSV", tmp_path / "data" / "processed" / "combined.csv")
+
+    def fake_fetch_site(site_name, keyword, max_pages, client=None):
+        raise RuntimeError(f"blocked: {site_name}")
+
+    monkeypatch.setattr(pipeline, "fetch_site", fake_fetch_site)
+
+    with pytest.raises(RuntimeError, match="blocked"):
+        run_crawl(["itviec"], ["python"], 1)

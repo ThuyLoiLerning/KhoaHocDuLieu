@@ -12,7 +12,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--keywords", default=",".join(DEFAULT_KEYWORDS), help="Comma-separated keywords")
     parser.add_argument("--max-pages", type=int, default=2, help="Max pages per site/keyword")
     parser.add_argument("--min-total-jobs", type=int, default=0, help="Fail if jobs < threshold")
-    parser.add_argument("--output-csv", default="data/processed/combined.csv", help="Output CSV path")
     return parser
 
 

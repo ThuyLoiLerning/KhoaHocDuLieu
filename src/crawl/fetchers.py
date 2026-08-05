@@ -47,6 +47,15 @@ class HttpClient:
         max_retries = 3
         backoffs = [2, 4, 6]
 
+        def _sleep_for_429(resp, retries: int) -> None:
+            retry_after = getattr(resp, "headers", {}).get("Retry-After") if hasattr(resp, "headers") else None
+            if retry_after and str(retry_after).isdigit():
+                sleep_time = int(retry_after)
+            else:
+                sleep_time = backoffs[min(retries, len(backoffs) - 1)]
+            logger.warning(f"[{site_name}] 429 Rate limited. Retrying in {sleep_time}s...")
+            time.sleep(sleep_time)
+
         while True:
             try:
                 resp = self.session.get(url, headers=req_headers, timeout=timeout)
@@ -55,13 +64,7 @@ class HttpClient:
                     if retries >= max_retries:
                         if hasattr(resp, "raise_for_status"):
                             resp.raise_for_status()
-                    retry_after = getattr(resp, "headers", {}).get("Retry-After") if hasattr(resp, "headers") else None
-                    if retry_after and str(retry_after).isdigit():
-                        sleep_time = int(retry_after)
-                    else:
-                        sleep_time = backoffs[min(retries, len(backoffs) - 1)]
-                    logger.warning(f"[{site_name}] 429 Rate limited. Retrying in {sleep_time}s...")
-                    time.sleep(sleep_time)
+                    _sleep_for_429(resp, retries)
                     retries += 1
                     continue
                 if hasattr(resp, "raise_for_status"):
@@ -71,8 +74,7 @@ class HttpClient:
                 resp = getattr(e, "response", None)
                 status = getattr(resp, "status_code", None) if resp else None
                 if status == 429 and retries < max_retries:
-                    sleep_time = backoffs[min(retries, len(backoffs) - 1)]
-                    time.sleep(sleep_time)
+                    _sleep_for_429(resp, retries)
                     retries += 1
                     continue
                 raise
@@ -159,8 +161,8 @@ def fetch_itviec(keyword: str, max_pages: int = 2, client: Optional[Any] = None)
                             "keyword": keyword,
                         })
         except Exception as e:
-            logger.warning(f"[itviec] Error fetching page {page}: {e}")
-            break
+            logger.error(f"[itviec] Error fetching page {page}: {e}")
+            raise
 
     return jobs
 
@@ -226,8 +228,8 @@ def fetch_glints(keyword: str, max_pages: int = 2, client: Optional[Any] = None)
                     "keyword": keyword,
                 })
         except Exception as e:
-            logger.warning(f"[glints] Error fetching page {page}: {e}")
-            break
+            logger.error(f"[glints] Error fetching page {page}: {e}")
+            raise
 
     return jobs
 
@@ -273,8 +275,8 @@ def fetch_vietnamworks(keyword: str, max_pages: int = 2, client: Optional[Any] =
                     "keyword": keyword,
                 })
         except Exception as e:
-            logger.warning(f"[vietnamworks] Error fetching page {page}: {e}")
-            break
+            logger.error(f"[vietnamworks] Error fetching page {page}: {e}")
+            raise
 
     return jobs
 
@@ -319,8 +321,8 @@ def fetch_vieclam24h(keyword: str, max_pages: int = 2, client: Optional[Any] = N
                     "keyword": keyword,
                 })
         except Exception as e:
-            logger.warning(f"[vieclam24h] Error fetching page {page}: {e}")
-            break
+            logger.error(f"[vieclam24h] Error fetching page {page}: {e}")
+            raise
 
     return jobs
 
@@ -366,8 +368,8 @@ def fetch_careerviet(keyword: str, max_pages: int = 2, client: Optional[Any] = N
                     "keyword": keyword,
                 })
         except Exception as e:
-            logger.warning(f"[careerviet] Error fetching page {page}: {e}")
-            break
+            logger.error(f"[careerviet] Error fetching page {page}: {e}")
+            raise
 
     return jobs
 
@@ -420,27 +422,22 @@ def fetch_topcv(keyword: str, max_pages: int = 2, client: Optional[Any] = None) 
                     "keyword": keyword,
                 })
         except Exception as e:
-            logger.warning(f"[topcv] Error fetching page {page}: {e}")
-            break
+            logger.error(f"[topcv] Error fetching page {page}: {e}")
+            raise
 
     return jobs
 
 
 def fetch_timviecnhanh(keyword: str, max_pages: int = 2, client: Optional[Any] = None) -> List[Dict[str, Any]]:
-    client = client or HttpClient()
-    url = f"https://www.timviecnhanh.com/tim-kiem?q={quote_plus(keyword)}&page=1"
-    try:
-        html = client.get_text(url, site_name="timviecnhanh")
-        next_data = _extract_script_json(html, script_id="__NEXT_DATA__")
-        if not next_data:
-            logger.warning("[timviecnhanh] Site redirected or Cloudflare challenge; returning empty.")
-            return []
-    except Exception as e:
-        logger.warning(f"[timviecnhanh] Fetch failed: {e}")
-        return []
-    return []
+    # Site merged into vieclam24h — crawling it can never yield jobs.
+    # Keep fetcher so SITE_REGISTRY is explicit; raise instead of fake success.
+    raise RuntimeError(
+        "timviecnhanh.com merged into vieclam24h.vn — use 'vieclam24h' site instead"
+    )
 
 
+# NOTE: timviecnhanh.com merged into vieclam24h.vn — fetch_timviecnhanh
+# raises RuntimeError instead of silently returning [].
 SITE_REGISTRY = {
     "itviec": fetch_itviec,
     "glints": fetch_glints,

@@ -103,89 +103,103 @@ class Deduplicator:
                     ))
                     processed.update(valid_dups)
 
-        # Phase 3: Fuzzy by title
-        remaining = [i for i in range(n) if i not in processed]
-        for i in range(len(remaining)):
-            if remaining[i] in processed:
+        # Phase 3: Fuzzy by title (only within same company — different
+        # companies legitimately post same/similar titles)
+        company_buckets = defaultdict(list)
+        for i in range(n):
+            if i not in processed:
+                company_buckets[str(df.iloc[i].get(company_col, "")).lower().strip()].append(i)
+
+        for company, remaining in company_buckets.items():
+            if not company:
                 continue
-            base_idx = remaining[i]
-            base_title = str(df.iloc[base_idx].get(title_col, "")).lower().strip()
-            if not base_title:
-                continue
-
-            fuzzy_group = [base_idx]
-            for j in range(i + 1, len(remaining)):
-                if remaining[j] in processed:
-                    continue
-                comp_idx = remaining[j]
-                comp_title = str(df.iloc[comp_idx].get(title_col, "")).lower().strip()
-                if not comp_title:
-                    continue
-
-                # Check if one contains the other
-                if base_title in comp_title or comp_title in base_title:
-                    score = min(1.0, len(base_title) / max(len(comp_title), 1))
-                    if score >= self.title_threshold:
-                        fuzzy_group.append(comp_idx)
-                        continue
-
-                # Sequence matcher
-                score = SequenceMatcher(None, base_title, comp_title).ratio()
-                if score >= self.title_threshold:
-                    fuzzy_group.append(comp_idx)
-
-            if len(fuzzy_group) > 1:
-                keep = fuzzy_group[0]
-                dups = fuzzy_group[1:]
-                valid_dups = [i for i in dups if i not in processed]
-                if valid_dups:
-                    groups.append(DuplicateGroup(
-                        kept_index=keep,
-                        duplicate_indices=valid_dups,
-                        match_type="near",
-                        score=score,  # Last score
-                        matched_fields=[title_col],
-                    ))
-                    processed.update(valid_dups)
-
-        # Phase 4: Fuzzy by description (expensive, skip if too many)
-        if desc_col and desc_col in df.columns and len(remaining) < 500:
-            remaining = [i for i in range(n) if i not in processed]
-            seen_desc: Dict[int, str] = {}
             for i in range(len(remaining)):
                 if remaining[i] in processed:
                     continue
                 base_idx = remaining[i]
-                base_desc = str(df.iloc[base_idx].get(desc_col, "")).lower().strip()
-                if len(base_desc) < 30:  # Too short
+                base_title = str(df.iloc[base_idx].get(title_col, "")).lower().strip()
+                if not base_title:
                     continue
 
-                desc_group = [base_idx]
+                fuzzy_group = [base_idx]
                 for j in range(i + 1, len(remaining)):
                     if remaining[j] in processed:
                         continue
                     comp_idx = remaining[j]
-                    comp_desc = str(df.iloc[comp_idx].get(desc_col, "")).lower().strip()
-                    if len(comp_desc) < 30:
+                    comp_title = str(df.iloc[comp_idx].get(title_col, "")).lower().strip()
+                    if not comp_title:
                         continue
 
-                    score = SequenceMatcher(None, base_desc, comp_desc).ratio()
-                    if score >= self.desc_threshold:
-                        desc_group.append(comp_idx)
+                    # Check if one contains the other
+                    if base_title in comp_title or comp_title in base_title:
+                        score = min(1.0, len(base_title) / max(len(comp_title), 1))
+                        if score >= self.title_threshold:
+                            fuzzy_group.append(comp_idx)
+                            continue
 
-                if len(desc_group) > 1:
-                    keep = desc_group[0]
-                    dups = desc_group[1:]
+                    # Sequence matcher
+                    score = SequenceMatcher(None, base_title, comp_title).ratio()
+                    if score >= self.title_threshold:
+                        fuzzy_group.append(comp_idx)
+
+                if len(fuzzy_group) > 1:
+                    keep = fuzzy_group[0]
+                    dups = fuzzy_group[1:]
                     valid_dups = [i for i in dups if i not in processed]
                     if valid_dups:
                         groups.append(DuplicateGroup(
                             kept_index=keep,
                             duplicate_indices=valid_dups,
                             match_type="near",
-                            score=score,
-                            matched_fields=[desc_col],
+                            score=score,  # Last score
+                            matched_fields=[title_col],
                         ))
                         processed.update(valid_dups)
+
+        # Phase 4: Fuzzy by description (only within same company, expensive, skip if too many)
+        if desc_col and desc_col in df.columns and len(remaining) < 500:
+            company_buckets = defaultdict(list)
+            for i in range(n):
+                if i not in processed:
+                    company_buckets[str(df.iloc[i].get(company_col, "")).lower().strip()].append(i)
+
+            for company, remaining in company_buckets.items():
+                if not company:
+                    continue
+                for i in range(len(remaining)):
+                    if remaining[i] in processed:
+                        continue
+                    base_idx = remaining[i]
+                    base_desc = str(df.iloc[base_idx].get(desc_col, "")).lower().strip()
+                    if len(base_desc) < 30:  # Too short
+                        continue
+
+                    desc_group = [base_idx]
+                    for j in range(i + 1, len(remaining)):
+                        if remaining[j] in processed:
+                            continue
+                        comp_idx = remaining[j]
+                        comp_desc = str(df.iloc[comp_idx].get(desc_col, "")).lower().strip()
+                        if len(comp_desc) < 30:
+                            continue
+
+                        score = SequenceMatcher(None, base_desc, comp_desc).ratio()
+                        if score >= self.desc_threshold:
+                            desc_group.append(comp_idx)
+
+                    if len(desc_group) > 1:
+                        keep = desc_group[0]
+                        dups = desc_group[1:]
+                        valid_dups = [i for i in dups if i not in processed]
+                        if valid_dups:
+                            groups.append(DuplicateGroup(
+                                kept_index=keep,
+                                duplicate_indices=valid_dups,
+                                match_type="near",
+                                score=score,
+                                matched_fields=[desc_col],
+                            ))
+                            processed.update(valid_dups)
 
         logger.info(f"[Deduplicator] Found {len(groups)} duplicate groups, removing {len(processed)} records")
         return groups

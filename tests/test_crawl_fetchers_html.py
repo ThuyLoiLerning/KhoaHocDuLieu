@@ -52,11 +52,9 @@ def test_fetch_careerviet_html_fallback():
     assert jobs[0]["city"] == "HCMC"
 
 
-def test_fetch_timviecnhanh_merge_page_returns_empty():
-    url = "https://www.timviecnhanh.com/tim-kiem?q=python&page=1"
-    html = "<html><body>redirected to vieclam24h</body></html>"
-    jobs = fetch_timviecnhanh(keyword="python", max_pages=1, client=FakeClient({url: html}))
-    assert jobs == []
+def test_fetch_timviecnhanh_raises_merged():
+    with pytest.raises(RuntimeError, match="merged into vieclam24h"):
+        fetch_timviecnhanh(keyword="python", max_pages=1, client=FakeClient({}))
 
 
 def test_fetch_site_unknown_raises():

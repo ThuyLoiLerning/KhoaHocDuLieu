@@ -45,8 +45,15 @@ def run_crawl(
                 src_counts[site] = src_counts.get(site, 0) + len(fetched)
             except Exception as e:
                 logger.error(f"Error crawling {site} for keyword '{kw}': {e}")
+                raise
 
     records: List[JobRecord] = normalize_raw_jobs(raw_jobs)
+
+    if len(records) < min_total_jobs:
+        raise RuntimeError(
+            f"Crawl below threshold: {len(records)} < {min_total_jobs} "
+            f"({src_counts}). No CSV written."
+        )
 
     job_dicts = [r.to_job_dict() for r in records]
     new_df = pd.DataFrame(job_dicts)
@@ -75,9 +82,6 @@ def run_crawl(
     n_final = len(final_df)
     n_existing = len(existing_df)
     n_new = max(0, n_final - n_existing)
-
-    if n_final < min_total_jobs:
-        raise RuntimeError(f"Crawl below threshold: {n_final} < {min_total_jobs}")
 
     final_df.to_csv(OUTPUT_CSV, index=False, encoding="utf-8-sig")
 
