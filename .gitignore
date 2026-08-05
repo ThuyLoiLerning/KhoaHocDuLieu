@@ -48,5 +48,8 @@ reports/*.pdf
 reports/*.pptx
 reports/*.docx
 
+# Crawl history (runtime output, not tracked)
+logs/crawl_history/*.json
+
 # Temp test artifacts
 tmp_test/
