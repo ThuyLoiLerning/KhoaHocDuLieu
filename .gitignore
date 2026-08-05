@@ -16,6 +16,7 @@ htmlcov/
 data/raw/*.csv
 data/raw/*.json
 data/raw/*.html
+data/raw/*.js
 data/raw/html/*.html
 data/processed/*.parquet
 data/processed/*.csv
