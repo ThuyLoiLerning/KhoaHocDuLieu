@@ -14,6 +14,22 @@ class FakeClient:
         return self.pages[url]
 
 
+def test_http_client_raises_on_blocked_response(monkeypatch):
+    """Cloudflare/captcha challenge pages must raise, not return silently."""
+    request = httpx.Request("GET", "https://example.test/jobs")
+    blocked_html = '<html><body><div class="cf-challenge">Checking your browser...</div></body></html>'
+
+    class SessionStub:
+        verify = True
+
+        def get(self, url, headers=None, timeout=None):
+            return httpx.Response(200, text=blocked_html, request=request)
+
+    client = HttpClient(session=SessionStub())
+    with pytest.raises(RuntimeError, match="(?i)blocked"):
+        client.get_text("https://example.test/jobs", site_name="itviec")
+
+
 def test_http_client_retries_429(monkeypatch):
     request = httpx.Request("GET", "https://example.test/jobs")
     responses = [
@@ -101,3 +117,63 @@ def test_next_data_family_parsers(fetch_fn, url, html, expected_title, expected_
     assert len(jobs) == 1
     assert jobs[0]["job_title"] == expected_title
     assert jobs[0]["company_name"] == expected_company
+def test_fetch_vietnamworks_html_fallback():
+    """HTML fallback khi __NEXT_DATA__ trống — parse cấu trúc div.job-item."""
+    listing_html = """
+    <html>
+      <div class="job-item">
+        <h3 class="job-title"><a href="/viec-lam/python-developer-123">Python Developer</a></h3>
+        <span class="company-name">FPT Software</span>
+        <span class="location">Hồ Chí Minh</span>
+        <span class="salary">10 - 15 triệu</span>
+        <span class="tag">Python</span>
+        <span class="tag">Django</span>
+      </div>
+      <div class="job-item">
+        <h3 class="job-title"><a href="/viec-lam/data-engineer-456">Data Engineer</a></h3>
+        <span class="company-name">VNG</span>
+        <span class="location">Hà Nội</span>
+        <span class="salary">20 - 30 triệu</span>
+        <span class="tag">Python</span>
+        <span class="tag">SQL</span>
+      </div>
+    </html>
+    """
+    jobs = fetch_vietnamworks(
+        keyword="python", max_pages=1,
+        client=FakeClient({"https://www.vietnamworks.com/viec-lam?q=python&page=1": listing_html}),
+    )
+    assert len(jobs) == 2
+    assert jobs[0]["job_title"] == "Python Developer"
+    assert jobs[0]["company_name"] == "FPT Software"
+    assert jobs[0]["city"] == "Hồ Chí Minh"
+    assert jobs[0]["salary_raw"] == "10 - 15 triệu"
+    assert set(jobs[0]["skills_raw"]) == {"Python", "Django"}
+    assert jobs[0]["source_url"] == "https://www.vietnamworks.com/viec-lam/python-developer-123"
+
+
+def test_fetch_itviec_follows_itemlist_to_details():
+    """Listing page has only ItemList of URLs; details carry JobPosting."""
+    listing_html = """
+    <html>
+      <script type='application/ld+json'>
+      {"@type":"ItemList","itemListElement":[{"@type":"ListItem","position":1,"url":"https://itviec.com/jobs/1"}]}
+      </script>
+    </html>
+    """
+    detail_html = """
+    <html>
+      <script type='application/ld+json'>
+      {"@type":"JobPosting","title":"Backend Developer","hiringOrganization":{"name":"FPT"},"jobLocation":{"address":{"addressRegion":"HCMC"}},"baseSalary":{"value":{"value":3000,"unitText":"USD"}},"datePosted":"2026-08-04","description":"Python Django"}
+      </script>
+    </html>
+    """
+    pages = {
+        "https://itviec.com/viec-lam-it?q=python&page=1": listing_html,
+        "https://itviec.com/jobs/1": detail_html,
+    }
+    jobs = fetch_itviec(keyword="python", max_pages=1, client=FakeClient(pages))
+    assert len(jobs) == 1
+    assert jobs[0]["job_title"] == "Backend Developer"
+    assert jobs[0]["company_name"] == "FPT"
+    assert jobs[0]["source_url"] == "https://itviec.com/jobs/1"

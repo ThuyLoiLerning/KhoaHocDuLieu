@@ -28,24 +28,60 @@ DEFAULT_KEYWORDS = [
 ]
 
 
+# Signatures of anti-bot challenge pages that replace real content.
+BLOCKED_MARKERS = (
+    "cf-challenge",
+    "cf_chl",
+    "challenge-platform",
+    "captcha",
+    "attention required",
+    "just a moment",
+    "enable javascript and cookies",
+    "access denied",
+)
+
+REQUEST_DELAY = (1.0, 3.0)  # random delay seconds between requests
+
+
+def _is_blocked_page(html: str) -> bool:
+    """Detect Cloudflare/captcha challenge pages vs real content."""
+    if not html:
+        return False
+    low = html[:20000].lower()
+    return any(marker in low for marker in BLOCKED_MARKERS)
+
+
 class HttpClient:
     """HTTP Client reusable session với verify=True và retry 429."""
 
     def __init__(self, session=None):
         self.session = session or httpx.Client(verify=True, follow_redirects=True, timeout=20.0)
+        self._last_request_at = 0.0
+
+    def _rate_delay(self) -> None:
+        """Sleep a random delay between requests to avoid 429."""
+        elapsed = time.time() - self._last_request_at
+        delay = random.uniform(*REQUEST_DELAY)
+        if elapsed < delay:
+            time.sleep(delay - elapsed)
 
     def get_text(self, url: str, *, site_name: str = "site", headers: Optional[Dict[str, str]] = None, timeout: float = 20.0) -> str:
+        self._rate_delay()
         req_headers = {
             "User-Agent": random.choice(USER_AGENTS),
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Cache-Control": "no-cache",
         }
         if headers:
             req_headers.update(headers)
 
         retries = 0
-        max_retries = 3
-        backoffs = [2, 4, 6]
+        max_retries = 6
+        backoffs = [2, 4, 8, 16, 30, 60]
 
         def _sleep_for_429(resp, retries: int) -> None:
             retry_after = getattr(resp, "headers", {}).get("Retry-After") if hasattr(resp, "headers") else None
@@ -69,7 +105,13 @@ class HttpClient:
                     continue
                 if hasattr(resp, "raise_for_status"):
                     resp.raise_for_status()
-                return getattr(resp, "text", str(resp))
+                text = getattr(resp, "text", str(resp))
+                self._last_request_at = time.time()
+                if _is_blocked_page(text):
+                    raise RuntimeError(
+                        f"[{site_name}] Blocked by anti-bot challenge (Cloudflare/captcha) at {url}"
+                    )
+                return text
             except Exception as e:
                 resp = getattr(e, "response", None)
                 status = getattr(resp, "status_code", None) if resp else None
@@ -115,6 +157,37 @@ def _extract_script_json(html: str, script_id: Optional[str] = None) -> List[Any
 # ============================================================
 
 
+def _parse_jobposting(item: Dict[str, Any], fallback_url: str) -> Dict[str, Any]:
+    """Parse one JSON-LD JobPosting into a raw job dict."""
+    company = item.get("hiringOrganization", {})
+    comp_name = company.get("name", "Unknown") if isinstance(company, dict) else str(company)
+    loc = item.get("jobLocation", {})
+    city = ""
+    if isinstance(loc, list) and loc:
+        loc = loc[0]
+    if isinstance(loc, dict):
+        addr = loc.get("address", {})
+        if isinstance(addr, dict):
+            city = addr.get("addressRegion") or addr.get("addressLocality") or ""
+    salary_val = item.get("baseSalary", {}).get("value", {}) if isinstance(item.get("baseSalary"), dict) else {}
+    salary_raw = ""
+    if isinstance(salary_val, dict) and "value" in salary_val:
+        salary_raw = f"{salary_val.get('value')} {salary_val.get('unitText', '')}".strip()
+
+    job_url = item.get("url") or fallback_url
+    return {
+        "job_id": generate_job_id("itviec", job_url),
+        "job_title": item.get("title", ""),
+        "company_name": comp_name,
+        "city": city,
+        "source_site": "itviec",
+        "source_url": job_url,
+        "salary_raw": salary_raw,
+        "description_raw": item.get("description", ""),
+        "posted_at": item.get("datePosted"),
+    }
+
+
 def fetch_itviec(keyword: str, max_pages: int = 2, client: Optional[Any] = None) -> List[Dict[str, Any]]:
     client = client or HttpClient()
     jobs = []
@@ -125,41 +198,32 @@ def fetch_itviec(keyword: str, max_pages: int = 2, client: Optional[Any] = None)
         try:
             html = client.get_text(url, site_name="itviec")
             jsonld_blocks = _extract_script_json(html)
+            detail_urls: List[str] = []
             for block in jsonld_blocks:
                 blocks = block if isinstance(block, list) else [block]
                 for item in blocks:
                     if not isinstance(item, dict):
                         continue
                     if item.get("@type") == "JobPosting":
-                        company = item.get("hiringOrganization", {})
-                        comp_name = company.get("name", "Unknown") if isinstance(company, dict) else str(company)
-                        loc = item.get("jobLocation", {})
-                        city = ""
-                        if isinstance(loc, list) and loc:
-                            loc = loc[0]
-                        if isinstance(loc, dict):
-                            addr = loc.get("address", {})
-                            if isinstance(addr, dict):
-                                city = addr.get("addressRegion") or addr.get("addressLocality") or ""
-                        salary_val = item.get("baseSalary", {}).get("value", {}) if isinstance(item.get("baseSalary"), dict) else {}
-                        salary_raw = ""
-                        if isinstance(salary_val, dict) and "value" in salary_val:
-                            salary_raw = f"{salary_val.get('value')} {salary_val.get('unitText', '')}".strip()
+                        jobs.append(_parse_jobposting(item, url))
+                    elif item.get("@type") == "ItemList":
+                        for elem in item.get("itemListElement", []):
+                            if isinstance(elem, dict) and elem.get("url"):
+                                detail_urls.append(elem["url"])
 
-                        job_url = item.get("url") or url
-                        job_id = generate_job_id("itviec", job_url)
-                        jobs.append({
-                            "job_id": job_id,
-                            "job_title": item.get("title", ""),
-                            "company_name": comp_name,
-                            "city": city,
-                            "source_site": "itviec",
-                            "source_url": job_url,
-                            "salary_raw": salary_raw,
-                            "description_raw": item.get("description", ""),
-                            "posted_at": item.get("datePosted"),
-                            "keyword": keyword,
-                        })
+            for d_url in detail_urls:
+                try:
+                    d_html = client.get_text(d_url, site_name="itviec")
+                    d_blocks = _extract_script_json(d_html)
+                    for block in d_blocks:
+                        blocks = block if isinstance(block, list) else [block]
+                        for item in blocks:
+                            if isinstance(item, dict) and item.get("@type") == "JobPosting":
+                                job = _parse_jobposting(item, d_url)
+                                job["keyword"] = keyword
+                                jobs.append(job)
+                except Exception as e:
+                    logger.warning(f"[itviec] Detail fetch failed {d_url}: {e}")
         except Exception as e:
             logger.error(f"[itviec] Error fetching page {page}: {e}")
             raise
@@ -178,9 +242,13 @@ def fetch_glints(keyword: str, max_pages: int = 2, client: Optional[Any] = None)
             html = client.get_text(url, site_name="glints")
             next_data = _extract_script_json(html, script_id="__NEXT_DATA__")
             if not next_data:
-                break
+                raise RuntimeError(f"site returned page without __NEXT_DATA__ (blocked or layout changed): {url}")
             page_props = next_data[0].get("props", {}).get("pageProps", {})
             job_list = page_props.get("jobs") or page_props.get("jobList") or []
+            # New glints layout: initialJobs.jobsInPage (dict wrapper)
+            initial_jobs = page_props.get("initialJobs", {})
+            if not job_list and isinstance(initial_jobs, dict):
+                job_list = initial_jobs.get("jobsInPage") or []
             if not job_list and isinstance(page_props, dict):
                 for v in page_props.values():
                     if isinstance(v, list) and v and isinstance(v[0], dict) and ("title" in v[0] or "jobTitle" in v[0]):
@@ -244,10 +312,18 @@ def fetch_vietnamworks(keyword: str, max_pages: int = 2, client: Optional[Any] =
         try:
             html = client.get_text(url, site_name="vietnamworks")
             next_data = _extract_script_json(html, script_id="__NEXT_DATA__")
-            if not next_data:
-                break
-            page_props = next_data[0].get("props", {}).get("pageProps", {})
+            page_props = next_data[0].get("props", {}).get("pageProps", {}) if next_data else {}
+            page_jobs = []
             job_list = page_props.get("outstandingJobs") or page_props.get("featuredJobs") or page_props.get("latestJobs") or []
+
+            if not job_list and isinstance(page_props, dict):
+                for v in page_props.values():
+                    if isinstance(v, list) and v and isinstance(v[0], dict) and ("jobTitle" in v[0] or "title" in v[0]):
+                        job_list = v
+                        break
+
+            if not job_list:
+                logger.warning(f"[vietnamworks] No jobs found in NEXT_DATA for {url} — falling back to HTML")
 
             for hit in job_list:
                 if not isinstance(hit, dict):
@@ -262,7 +338,7 @@ def fetch_vietnamworks(keyword: str, max_pages: int = 2, client: Optional[Any] =
                 if not job_url.startswith("http"):
                     job_url = urljoin("https://www.vietnamworks.com", job_url)
 
-                jobs.append({
+                page_jobs.append({
                     "job_id": generate_job_id("vietnamworks", job_url),
                     "job_title": title,
                     "company_name": comp_name,
@@ -274,6 +350,43 @@ def fetch_vietnamworks(keyword: str, max_pages: int = 2, client: Optional[Any] =
                     "description_raw": hit.get("jobDescription", ""),
                     "keyword": keyword,
                 })
+
+            # Fallback to HTML parsing if NEXT_DATA empty
+            if not page_jobs:
+                soup = BeautifulSoup(html, "lxml")
+                cards = soup.select("div.job-item")
+                for card in cards:
+                    title_elem = card.select_one("h3.job-title a") or card.select_one("a")
+                    if not title_elem or not title_elem.get_text(strip=True):
+                        continue
+                    title = title_elem.get_text(strip=True)
+                    job_url = urljoin("https://www.vietnamworks.com", title_elem.get("href", ""))
+
+                    comp_elem = card.select_one("span.company-name") or card.select_one("a.company-name")
+                    comp_name = comp_elem.get_text(strip=True) if comp_elem else "Unknown"
+
+                    loc_elem = card.select_one("span.location")
+                    city = loc_elem.get_text(strip=True) if loc_elem else ""
+
+                    sal_elem = card.select_one("span.salary")
+                    salary_raw = sal_elem.get_text(strip=True) if sal_elem else ""
+
+                    skills = [t.get_text(strip=True) for t in card.select("span.tag") if t.get_text(strip=True)]
+
+                    page_jobs.append({
+                        "job_id": generate_job_id("vietnamworks", job_url),
+                        "job_title": title,
+                        "company_name": comp_name,
+                        "city": city,
+                        "source_site": "vietnamworks",
+                        "source_url": job_url,
+                        "salary_raw": salary_raw,
+                        "skills_raw": skills,
+                        "description_raw": "",
+                        "keyword": keyword,
+                    })
+
+            jobs.extend(page_jobs)
         except Exception as e:
             logger.error(f"[vietnamworks] Error fetching page {page}: {e}")
             raise
@@ -292,7 +405,7 @@ def fetch_vieclam24h(keyword: str, max_pages: int = 2, client: Optional[Any] = N
             html = client.get_text(url, site_name="vieclam24h")
             next_data = _extract_script_json(html, script_id="__NEXT_DATA__")
             if not next_data:
-                break
+                raise RuntimeError(f"site returned page without __NEXT_DATA__ (blocked or layout changed): {url}")
             initial_state = next_data[0].get("props", {}).get("initialState", {}).get("api", {})
             get_job_list = initial_state.get("getJobList", {}) if isinstance(initial_state, dict) else {}
             job_list = get_job_list.get("data") or []
