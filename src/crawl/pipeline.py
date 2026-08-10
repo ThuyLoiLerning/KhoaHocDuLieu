@@ -11,6 +11,7 @@ import pandas as pd
 from src.cleaning.deduplicator import Deduplicator
 from src.crawl.fetchers import HttpClient, fetch_site
 from src.crawl.normalizer import normalize_raw_jobs
+from src.data.data_manager import JobDataManager
 from src.domain.job_record import JobRecord
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,26 @@ def run_crawl(
             f"Crawl below threshold: {len(records)} < {min_total_jobs} "
             f"({src_counts}). No CSV written."
         )
+
+    # Save raw data (B6: data/raw/ CSV + JSON) before merge
+    if records:
+        dm = JobDataManager(raw_dir=str(DATA_DIR / "raw"), processed_dir=str(PROCESSED_DIR))
+        try:
+            per_site: Dict[str, List[JobRecord]] = {}
+            for r in records:
+                per_site.setdefault(r.source_site, []).append(r)
+            for site, site_recs in per_site.items():
+                job_postings = [r.to_job_posting() for r in site_recs]
+                dm.save_raw_jobs(job_postings, site)
+                all_skills = [s for r in site_recs for s in r.skills]
+                if all_skills:
+                    dm.save_raw_skills(all_skills, site)
+                companies = {r.company_id: r.to_company() for r in site_recs}
+                if companies:
+                    dm.save_raw_companies(list(companies.values()), site)
+            logger.info(f"Saved raw data: {len(records)} jobs -> data/raw/")
+        except Exception as e:
+            logger.warning(f"Could not save raw data: {e}")
 
     job_dicts = [r.to_job_dict() for r in records]
     new_df = pd.DataFrame(job_dicts)

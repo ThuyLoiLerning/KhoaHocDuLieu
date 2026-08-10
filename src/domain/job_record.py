@@ -78,6 +78,16 @@ class JobRecord:
             res.append(d)
         return res
 
+    def to_company(self) -> Company:
+        return Company(
+            company_id=self.company_id,
+            company_name=self.company_name,
+            city=self.city,
+            source_site=self.source_site,
+            source_url=self.source_url,
+            crawled_at=self.crawled_at if isinstance(self.crawled_at, datetime) else datetime.now(),
+        )
+
     def to_company_dict(self) -> Dict[str, Any]:
         comp = Company(
             company_id=self.company_id,

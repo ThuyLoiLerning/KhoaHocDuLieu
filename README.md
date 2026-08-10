@@ -40,8 +40,8 @@
 
 ```
 ├── data/
-│   ├── raw/                  # Dữ liệu gốc (CSV, JSON)
-│   └── processed/            # Dữ liệu đã làm sạch (Parquet + CSV)
+│   ├── raw/                  # Dữ liệu gốc (raw_jobs/skills/companies — CSV+JSON, tự ghi mỗi crawl)
+│   └── processed/            # Dữ liệu đã làm sạch (combined.csv + parquet)
 ├── notebooks/
 │   ├── 01_problem_and_data.ipynb       # Problem definition, data dictionary, OOP
 │   ├── 02_collection_and_cleaning.ipynb # Thu thập, cleaning, logs
@@ -86,7 +86,7 @@
 | A2 | Phạm vi hẹp, 2 tuần | ✅ | 1 chuyên đề, 8 buổi |
 | A3 | Không vi phạm pháp lý | ✅ | requests + BeautifulSoup, không CAPTCHA/login |
 | A4 | Phương án dự phòng | ✅ | Fallback data generator khi scrapers block |
-| A5 | ≥2 nguồn/định dạng | ✅ | CSV + JSON (raw), Parquet + CSV (processed) |
+| A5 | ≥2 nguồn/định dạng | ✅ | 4 sources; CSV + JSON (raw), Parquet + CSV (processed) |
 | A6 | ≥1.000 bản ghi | ✅ | 1.193 jobs |
 | A7 | ≥10 thuộc tính | ✅ | 44 columns |
 | A8 | Có dữ liệu bẩn | ✅ | Inject missing (15%), duplicate (3%), typo |
@@ -109,7 +109,7 @@
 | B3 | Notebook 3 | `03_eda.ipynb` | ✅ 34 cells, 10 charts |
 | B4 | Notebook 4 | `04_machine_learning.ipynb` | ✅ 35 cells, all models |
 | B5 | Mã nguồn src/ | `src/` (17 files) | ✅ |
-| B6 | Dữ liệu gốc | `data/raw/` | ✅ CSV + JSON |
+| B6 | Dữ liệu gốc | `data/raw/` | ✅ `raw_jobs_*.csv/.json`, `raw_skills_*.csv`, `raw_companies_*.csv` (tự ghi mỗi lần crawl) |
 | B7 | Dữ liệu sạch | `data/processed/` | ✅ Parquet + CSV |
 | B8 | Nhật ký lỗi | `logs/cleaning_errors.log` | ✅ |
 | B9 | Báo cáo | `reports/final_report.md` + `reports/slides/slide_deck.md` | ✅ |
@@ -129,7 +129,7 @@
 | C6 | ≥20 kỹ năng chuẩn hóa | ✅ 188 synonym entries |
 | C7 | ≥12 thuộc tính | ✅ 44 |
 | C8 | ≥3 thành phố | ✅ HCMC, Hanoi, Da Nang (+ tỉnh lẻ từ careerviet) |
-| C9 | 2+ nguồn/định dạng | ✅ CSV + JSON + Parquet |
+| C9 | 2+ nguồn/định dạng | ✅ CSV + JSON (raw) + Parquet + CSV (processed) |
 
 ### D — Yêu cầu OOP & Python
 
@@ -365,7 +365,8 @@ pytest tests/ -v
 
 | File | Mô tả |
 |------|-------|
-| `data/raw/raw_jobs_*.csv` | Raw jobs data |
+| `data/raw/raw_jobs_*.csv` | Raw jobs data (CSV) |
+| `data/raw/raw_jobs_*.json` | Raw jobs data (JSON) |
 | `data/raw/raw_skills_*.csv` | Raw skills data |
 | `data/raw/raw_companies_*.csv` | Raw companies data |
 | `data/processed/combined_*.parquet` | Clean merged data (Parquet) |
