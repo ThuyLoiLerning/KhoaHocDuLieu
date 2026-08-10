@@ -76,13 +76,20 @@ class RecommendationEngine:
         return self
 
     def recommend(self, user_skills: List[str], jobs_df: pd.DataFrame,
-                  top_n: int = 10) -> List[Recommendation]:
+                  top_n: int = 10,
+                  experience_years: Optional[float] = None,
+                  city: Optional[str] = None) -> List[Recommendation]:
         """Recommend jobs based on user skill profile.
 
         Args:
             user_skills: list of skill names the user has
-            jobs_df: DataFrame with job details (job_id, job_title, company_name, city, salary_mid)
+            jobs_df: DataFrame with job details (job_id, job_title,
+                company_name, city, salary_mid, [experience_years_parsed])
             top_n: number of top recommendations to return
+            experience_years: if given, only jobs with experience_years_parsed
+                within [x-0.5, x+0.5] are returned (fallback: experience_bin)
+            city: if given, only jobs whose city matches (case-insensitive)
+                are returned
 
         Returns:
             List of Recommendation, sorted by similarity score
@@ -96,8 +103,41 @@ class RecommendationEngine:
         # Compute cosine similarity with all jobs
         similarities = cosine_similarity(user_vector, self.job_skill_matrix).flatten()
 
-        # Get top N indices
-        top_indices = np.argsort(similarities)[::-1][:top_n]
+        # Filter mask (keep = not excluded)
+        job_ids_array = np.array(self.job_ids)
+        keep = np.ones(len(job_ids_array), dtype=bool)
+
+        if city is not None and str(city).strip():
+            city_norm = str(city).strip().lower()
+            city_vals = jobs_df.set_index("job_id")["city"].fillna("").astype(str).str.lower()
+            keep = np.array([city_vals.get(jid, "") == city_norm for jid in job_ids_array])
+
+        if experience_years is not None:
+            jobs_by_id = jobs_df.set_index("job_id")
+            if "experience_years_parsed" in jobs_by_id.columns:
+                exp_vals = jobs_by_id["experience_years_parsed"]
+                keep = np.array([
+                    pd.notna(exp_vals.get(jid)) and
+                    abs(float(exp_vals.get(jid)) - experience_years) <= 0.5
+                    for jid in job_ids_array
+                ])
+            elif "experience_bin" in jobs_by_id.columns:
+                bins = {"entry": 1.0, "junior": 2.0, "mid": 4.0, "senior": 6.0, "lead": 8.0}
+                target_bin = min(bins.items(), key=lambda kv: abs(kv[1] - experience_years))[0]
+                bin_vals = jobs_by_id["experience_bin"].fillna("").astype(str)
+                keep = np.array([bin_vals.get(jid, "") == target_bin for jid in job_ids_array])
+            else:
+                logger.warning(
+                    "experience_years filter requested but neither "
+                    "'experience_years_parsed' nor 'experience_bin' exists; ignoring"
+                )
+
+        # Apply filter BEFORE top-N
+        candidates = np.where(keep)[0]
+        if len(candidates) == 0:
+            return []
+        sims_filtered = similarities[candidates]
+        top_indices = candidates[np.argsort(sims_filtered)[::-1][:top_n]]
 
         # Find matched/missing skills
         all_matched = []

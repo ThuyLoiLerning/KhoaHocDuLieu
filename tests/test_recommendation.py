@@ -118,6 +118,38 @@ def test_job_skill_count():
     assert eng.get_job_skill_count() >= 6
 
 
+def test_recommend_filter_city():
+    """--city lọc jobs theo thành phố, không phân biệt hoa/thường."""
+    skills, jobs = make_sample_data()
+    # jobs: j1=HCMC, j2=Hanoi, j3=HCMC
+    eng = RecommendationEngine()
+    eng.fit(skills)
+    recs = eng.recommend(["Python", "SQL"], jobs, top_n=10, city="hcmc")
+    assert len(recs) > 0
+    assert all(r.city.lower() == "hcmc" for r in recs)
+
+
+def test_recommend_filter_experience():
+    """--years lọc jobs theo experience_years_parsed (window ±0.5)."""
+    skills, jobs = make_sample_data()
+    jobs["experience_years_parsed"] = [2.0, 5.0, 1.0]
+    eng = RecommendationEngine()
+    eng.fit(skills)
+    # j1 exp=2.0: window [1.5, 2.5] → khớp; j3 exp=1.0 → không khớp
+    recs = eng.recommend(["Python", "SQL"], jobs, top_n=10, experience_years=2.0)
+    assert all(r.job_id in ("j1", "j2") for r in recs)
+    assert all(r.job_id != "j3" for r in recs)
+
+
+def test_recommend_filter_no_match_returns_empty():
+    """Không job nào khớp filter → trả về []."""
+    skills, jobs = make_sample_data()
+    eng = RecommendationEngine()
+    eng.fit(skills)
+    recs = eng.recommend(["Python"], jobs, top_n=10, city="Da Nang")
+    assert recs == []
+
+
 def test_unknown_job_recommend():
     """recommend_by_job_id with unknown ID raises ValueError"""
     skills, jobs = make_sample_data()
