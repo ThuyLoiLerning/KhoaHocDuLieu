@@ -110,13 +110,13 @@ class RecommendationEngine:
         if city is not None and str(city).strip():
             city_norm = str(city).strip().lower()
             city_vals = jobs_df.set_index("job_id")["city"].fillna("").astype(str).str.lower()
-            keep = np.array([city_vals.get(jid, "") == city_norm for jid in job_ids_array])
+            keep &= np.array([city_vals.get(jid, "") == city_norm for jid in job_ids_array])
 
         if experience_years is not None:
             jobs_by_id = jobs_df.set_index("job_id")
             if "experience_years_parsed" in jobs_by_id.columns:
                 exp_vals = jobs_by_id["experience_years_parsed"]
-                keep = np.array([
+                keep &= np.array([
                     pd.notna(exp_vals.get(jid)) and
                     abs(float(exp_vals.get(jid)) - experience_years) <= 0.5
                     for jid in job_ids_array
@@ -125,7 +125,7 @@ class RecommendationEngine:
                 bins = {"entry": 1.0, "junior": 2.0, "mid": 4.0, "senior": 6.0, "lead": 8.0}
                 target_bin = min(bins.items(), key=lambda kv: abs(kv[1] - experience_years))[0]
                 bin_vals = jobs_by_id["experience_bin"].fillna("").astype(str)
-                keep = np.array([bin_vals.get(jid, "") == target_bin for jid in job_ids_array])
+                keep &= np.array([bin_vals.get(jid, "") == target_bin for jid in job_ids_array])
             else:
                 logger.warning(
                     "experience_years filter requested but neither "

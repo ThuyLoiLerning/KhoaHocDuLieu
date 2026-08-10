@@ -56,7 +56,7 @@
 │   ├── ml/                   # baseline, supervised, clustering, recommendation
 │   └── visualization/        # chart_utils.py (styled charts)
 ├── logs/
-│   ├── cleaning_errors.log   # 24k+ lines — chi tiết cleaning errors
+│   ├── cleaning_errors.log   # chi tiết cleaning errors
 │   ├── source_metadata.log   # 39k+ lines — nguồn gốc từng record
 │   └── crawl_history/        # Nhật ký từng lần crawl (JSON)
 ├── reports/
@@ -87,8 +87,8 @@
 | A3 | Không vi phạm pháp lý | ✅ | requests + BeautifulSoup, không CAPTCHA/login |
 | A4 | Phương án dự phòng | ✅ | Fallback data generator khi scrapers block |
 | A5 | ≥2 nguồn/định dạng | ✅ | CSV + JSON (raw), Parquet + CSV (processed) |
-| A6 | ≥1.000 bản ghi | ✅ | 1.329 jobs |
-| A7 | ≥10 thuộc tính | ✅ | 34 columns |
+| A6 | ≥1.000 bản ghi | ✅ | 1.193 jobs |
+| A7 | ≥10 thuộc tính | ✅ | 44 columns |
 | A8 | Có dữ liệu bẩn | ✅ | Inject missing (15%), duplicate (3%), typo |
 | A9 | Baseline | ✅ | DummyRegressor (mean, median) |
 | A10 | ≥2 mô hình có giám sát | ✅ | Linear Regression, Decision Tree, Random Forest |
@@ -111,7 +111,7 @@
 | B5 | Mã nguồn src/ | `src/` (17 files) | ✅ |
 | B6 | Dữ liệu gốc | `data/raw/` | ✅ CSV + JSON |
 | B7 | Dữ liệu sạch | `data/processed/` | ✅ Parquet + CSV |
-| B8 | Nhật ký lỗi | `logs/cleaning_errors.log` | ✅ 24k lines |
+| B8 | Nhật ký lỗi | `logs/cleaning_errors.log` | ✅ |
 | B9 | Báo cáo | `reports/final_report.md` + `reports/slides/slide_deck.md` | ✅ |
 | B10 | README | `README.md` | ✅ |
 | B11 | AI usage log | `reports/ai_usage_log.md` | ✅ |
@@ -125,10 +125,10 @@
 | C2 | Cấu trúc job_postings | ✅ job_id → crawled_at (15 fields) |
 | C3 | Cấu trúc job_skills | ✅ job_id, skill_name, skill_group, required_level |
 | C4 | Cấu trúc companies | ✅ company_id, company_size, industry, city |
-| C5 | ≥1.000 tin tuyển dụng | ✅ 1.329 |
+| C5 | ≥1.000 tin tuyển dụng | ✅ 1.193 |
 | C6 | ≥20 kỹ năng chuẩn hóa | ✅ 188 synonym entries |
-| C7 | ≥12 thuộc tính | ✅ 34 |
-| C8 | ≥3 thành phố | ✅ HCMC, Hanoi, Da Nang |
+| C7 | ≥12 thuộc tính | ✅ 44 |
+| C8 | ≥3 thành phố | ✅ HCMC, Hanoi, Da Nang (+ tỉnh lẻ từ careerviet) |
 | C9 | 2+ nguồn/định dạng | ✅ CSV + JSON + Parquet |
 
 ### D — Yêu cầu OOP & Python
@@ -189,12 +189,12 @@
 
 | # | Điều kiện | Status |
 |---|-----------|--------|
-| J1 | Có dữ liệu gốc và đã làm sạch | ✅ 1.329 jobs, 34 cols, raw + processed |
+| J1 | Có dữ liệu gốc và đã làm sạch | ✅ 1.193 jobs, 44 cols, raw + processed |
 | J2 | Mã nguồn chạy được từ đầu đến cuối | ✅ `crawl.py` CLI + notebooks → DONE |
 | J3 | Có baseline và đánh giá trên test | ✅ Baseline + 3 models, train/test 80/20 |
 | J4 | Phân công và minh chứng | ✅ contribution_table.md |
 | J5 | Giải thích được kết quả AI | ✅ reports/ai_usage_log.md |
-| J6 | Không vi phạm quyền riêng tư | ✅ 100% fallback, không PII |
+| J6 | Không vi phạm quyền riêng tư | ✅ Crawl v2 public data, không PII |
 
 ---
 
@@ -305,8 +305,12 @@ ipykernel>=6.25.0
 ### 1. Thu thập dữ liệu (crawl v2)
 
 ```bash
-python crawl.py --sites itviec glints vietnamworks --keywords python data
+python crawl.py --sites "itviec,glints,vietnamworks" --keywords "python,data"
 ```
+
+> **Lưu ý:** `--sites`/`--keywords` nhận danh sách cách nhau bởi dấu phẩy (không phải khoảng trắng).
+> `--max-pages N` tăng số trang/site/keyword. `vietnamworks` thường bị block (HTML fallback), chạy sâu hơn nếu cần:
+> `python crawl.py --sites "itviec,glints" --keywords "python,data,developer,engineer" --max-pages 5`
 
 CLI crawl v2:
 - Crawl các site tuyển dụng (JSON-LD, __NEXT_DATA__, HTML fallback)
@@ -324,13 +328,13 @@ python scripts/recommend_jobs.py Python SQL --city HCMC --years 3 --top-n 5
 CLI đọc `data/processed/combined.csv`, lọc theo `--city` (không phân biệt hoa/thường)
 và `--years` (kinh nghiệm ±0.5 năm), trả về top-N việc phù hợp nhất theo độ tương đồng kỹ năng.
 
-### 2. Verify data
+### 3. Verify data
 
 ```bash
 python verify_data.py
 ```
 
-### 3. Chạy notebooks (tuần tự)
+### 4. Chạy notebooks (tuần tự)
 
 ```bash
 jupyter notebook
@@ -351,7 +355,7 @@ jupyter nbconvert --to notebook --execute notebooks/03_eda.ipynb --output 03.ipy
 jupyter nbconvert --to notebook --execute notebooks/04_machine_learning.ipynb --output 04.ipynb
 ```
 
-### 4. Chạy tests
+### 5. Chạy tests
 
 ```bash
 pytest tests/ -v
@@ -377,13 +381,14 @@ pytest tests/ -v
 
 | Chỉ tiêu | Giá trị |
 |----------|---------|
-| Tổng số jobs | 1.329 |
-| Thuộc tính | 34 columns |
-| Thành phố | HCMC (50%), Hanoi (46%), Da Nang (4%) |
-| Kỹ năng | 45 unique, 188 synonyms |
-| Jobs có skills | 100% |
-| Salary coverage | 75% (25% hidden) |
-| Duplicates removed | 75 records (29 groups) |
+| Tổng số jobs | 1.193 |
+| Thuộc tính | 44 columns |
+| Thành phố | HCMC (468), Hanoi (366), Da Nang (14) + tỉnh lẻ (careerviet) |
+| Kỹ năng | 188 synonyms (45 unique canonical) |
+| Jobs có skills | 79/1.193 (6,6%) — careerviet/topcv listing không có skills |
+| Salary coverage | 44% (56% hidden) |
+| Duplicates removed | 70 records (crawl v2 dedup) |
+| Nguồn | careerviet 970, itviec 138, glints 56, topcv 29 |
 
 ### Models
 
@@ -408,9 +413,9 @@ pytest tests/ -v
 
 | File | Dung lượng |
 |------|------------|
-| `cleaning_errors.log` | 24.062 lines (~2.1 MB) |
-| `source_metadata.log` | 39.000 lines (~4.9 MB) |
-| `logs/crawl_history/` | JSON nhật ký từng lần crawl |
+| `cleaning_errors.log` | cleaning pipeline log |
+| `source_metadata.log` | source tracking log |
+| `logs/crawl_history/` | JSON nhật ký từng lần crawl (18 runs, mới nhất 20260810_181540) |
 
 ---
 
@@ -434,18 +439,18 @@ pytest tests/ -v
 - Tôn trọng robots.txt, delay 1-3s giữa các request
 - Không thu thập dữ liệu nhạy cảm (SĐT, email, CMND)
 - Ghi nguồn rõ ràng trong `logs/source_metadata.log`
-- Scrapers hiện không crawl được do sites block — dùng fallback (đáp ứng A4)
+- Crawl v2 hoạt động (itviec, glints, careerviet, topcv); vietnamworks bị block — dùng HTML fallback
 
 ---
 
 ## Giới hạn (A16)
 
-1. **100% fallback data** — scrapers không crawl được, kết quả chưa đại diện thị trường thật
-2. **Features hạn chế** — thiếu skill encoding trong regression, chưa có text features
-3. **Overfitting** — Decision Tree / RF quá tốt do data synthetic (cần data thật để đánh giá)
-4. **Imbalance** — Da Nang chỉ 4%, model bias theo thành phố
-5. **Thiếu temporal** — không xét biến động lương theo thời gian
-6. **Recommendation** — chỉ dùng content-based, chưa có collaborative filtering
+1. **Skills thấp (6,6%)** — careerviet/topcv (89% data) listing không có skills field; itviec/glints chỉ crawl detail khi max-pages cao. Recommendation dùng được nhưng trên tập nhỏ.
+2. **vietnamworks bị block** — HTML fallback không lấy được jobs, nguồn chủ yếu careerviet + itviec + glints + topcv.
+3. **City có tỉnh lẻ + chuỗi nối** — careerviet listing trả nhiều địa điểm trong 1 element (`Bình Dươngbình Phước`), cần normalization thêm.
+4. **Overfitting** — Decision Tree / RF quá tốt do feature hạn chế, cần đánh giá kỹ trên data thật.
+5. **Imbalance** — Da Nang chỉ 1%, model bias theo thành phố.
+6. **Recommendation** — chỉ dùng content-based, chưa có collaborative filtering.
 
 ---
 
