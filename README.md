@@ -48,8 +48,9 @@
 │   ├── 03_eda.ipynb                    # EDA, 8+ charts, F1-F4
 │   └── 04_machine_learning.ipynb       # ML models, clustering, recommendation
 ├── src/
-│   ├── domain/               # Domain classes: JobPosting, Skill, Company
-│   ├── data/                 # collector.py, salary_parser.py, data_manager.py
+│   ├── crawl/                # Crawler v2: fetchers, normalizer, pipeline, CLI crawl.py
+│   ├── domain/               # Domain classes: JobPosting, Skill, Company, JobRecord
+│   ├── data/                 # data_manager.py, salary_parser.py
 │   ├── cleaning/             # skill_normalizer, experience_normalizer, deduplicator, title_normalizer
 │   ├── features/             # feature_pipeline.py (ColumnTransformer)
 │   ├── ml/                   # baseline, supervised, clustering, recommendation
@@ -57,19 +58,16 @@
 ├── logs/
 │   ├── cleaning_errors.log   # 24k+ lines — chi tiết cleaning errors
 │   ├── source_metadata.log   # 39k+ lines — nguồn gốc từng record
-│   └── generate_data.log     # Pipeline run log
+│   └── crawl_history/        # Nhật ký từng lần crawl (JSON)
 ├── reports/
 │   ├── ai_usage_log.md       # Prompt log (B11, L1-L3)
 │   ├── final_report.md       # Báo cáo 20 trang (B9)
 │   └── slides/
 │       └── slide_deck.md     # Slide thuyết trình
-├── tests/
-│   ├── test_salary_parser.py
-│   ├── test_skill_normalizer.py
-│   ├── test_deduplicator.py
-│   └── test_recommendation.py
+├── tests/                    # pytest: crawl, cleaning, ml
 ├── scripts/
-│   └── generate_data.py      # Full pipeline script
+│   └── recommend_jobs.py     # CLI gợi ý việc theo hồ sơ (skills + --years/--city)
+├── crawl.py                  # CLI crawl v2 (thu thập dữ liệu)
 ├── README.md
 ├── contribution_table.md     # Phân công (B12, J4)
 ├── requirements.txt
@@ -141,7 +139,7 @@
 | D2 | Skill | `src/domain/skill.py` | ✅ Dataclass, 5 fields |
 | D3 | JobDataManager | `src/data/data_manager.py` | ✅ Load, merge, log, save |
 | D4 | RecommendationEngine | `src/ml/recommendation.py` | ✅ Cosine similarity |
-| D5 | Đọc HTML/JSON/CSV | `src/data/collector.py` | ✅ 3 định dạng |
+| D5 | Đọc HTML/JSON/CSV | `src/crawl/fetchers.py` | ✅ JSON-LD, __NEXT_DATA__, HTML |
 | D6 | Phát hiện trùng | `src/cleaning/deduplicator.py` | ✅ Exact + fuzzy |
 | D7 | Ghi lỗi + metadata | `src/data/data_manager.py` | ✅ cleaning_logger + source_logger |
 
@@ -192,7 +190,7 @@
 | # | Điều kiện | Status |
 |---|-----------|--------|
 | J1 | Có dữ liệu gốc và đã làm sạch | ✅ 1.329 jobs, 34 cols, raw + processed |
-| J2 | Mã nguồn chạy được từ đầu đến cuối | ✅ scripts/generate_data.py → DONE |
+| J2 | Mã nguồn chạy được từ đầu đến cuối | ✅ `crawl.py` CLI + notebooks → DONE |
 | J3 | Có baseline và đánh giá trên test | ✅ Baseline + 3 models, train/test 80/20 |
 | J4 | Phân công và minh chứng | ✅ contribution_table.md |
 | J5 | Giải thích được kết quả AI | ✅ reports/ai_usage_log.md |
@@ -304,20 +302,27 @@ ipykernel>=6.25.0
 
 ## Chạy lại toàn bộ pipeline
 
-### 1. Generate data (scrape + clean + merge)
+### 1. Thu thập dữ liệu (crawl v2)
 
 ```bash
-python scripts/generate_data.py
+python crawl.py --sites itviec glints vietnamworks --keywords python data
 ```
 
-Script này chạy toàn bộ pipeline:
-- Chạy scrapers (tự động fallback nếu sites block)
-- Inject dirty data (A8)
-- Parse salary, normalize skills/experience/title
-- Deduplicate
-- Merge 3 datasets
-- Save processed Parquet + CSV
-- Log tất cả ra `logs/`
+CLI crawl v2:
+- Crawl các site tuyển dụng (JSON-LD, __NEXT_DATA__, HTML fallback)
+- Chuẩn hóa → JobRecord → deduplicate → merge
+- Ghi `data/processed/combined.csv` + nhật ký `logs/crawl_history/`
+
+Xem thêm: `python crawl.py --help`
+
+### 2. Gợi ý việc làm theo hồ sơ (kỹ năng + kinh nghiệm + thành phố)
+
+```bash
+python scripts/recommend_jobs.py Python SQL --city HCMC --years 3 --top-n 5
+```
+
+CLI đọc `data/processed/combined.csv`, lọc theo `--city` (không phân biệt hoa/thường)
+và `--years` (kinh nghiệm ±0.5 năm), trả về top-N việc phù hợp nhất theo độ tương đồng kỹ năng.
 
 ### 2. Verify data
 
@@ -405,7 +410,7 @@ pytest tests/ -v
 |------|------------|
 | `cleaning_errors.log` | 24.062 lines (~2.1 MB) |
 | `source_metadata.log` | 39.000 lines (~4.9 MB) |
-| `generate_data.log` | 1.909 lines (~173 KB) |
+| `logs/crawl_history/` | JSON nhật ký từng lần crawl |
 
 ---
 
