@@ -27,49 +27,60 @@ logger = logging.getLogger(__name__)
 
 
 def load_data():
-    """Load skills long-format and jobs data."""
+    """Load jobs từ combined.csv (đã có cột skills, experience_years_parsed, city)."""
     dm = JobDataManager()
-
-    # Load processed skills CSV (long format: one row per skill per job)
-    skills_path = dm.processed_dir / "skills_clean.csv"
-    if not skills_path.exists():
-        sys.stderr.write("ERROR: skills_clean.csv not found in processed dir.\n")
-        sys.exit(1)
-    skills_df = pd.read_csv(skills_path, encoding="utf-8-sig")
-    if skills_df.empty:
-        sys.stderr.write("ERROR: skills_clean.csv is empty.\n")
-        sys.exit(1)
-
-    # Load latest combined parquet (job details + company_name)
-    jobs_df = dm.load_processed("combined_*.parquet")
-    if jobs_df.empty:
-        sys.stderr.write("ERROR: no combined parquet found in processed dir.\n")
-        sys.exit(1)
-
-    # Keep only skills for jobs that exist in jobs_df — otherwise engine
-    # recommends jobs with no lookup record and returns nothing.
-    known_ids = set(jobs_df["job_id"].unique())
-    before = len(skills_df)
-    skills_df = skills_df[skills_df["job_id"].isin(known_ids)]
-    if skills_df.empty:
+    combined_path = dm.processed_dir / "combined.csv"
+    if not combined_path.exists():
         sys.stderr.write(
-            f"ERROR: no skill rows match any of the {len(known_ids)} "
-            "job_ids in the combined parquet.\n"
+            f"ERROR: {combined_path} not found. Run 'python crawl.py' first.\n"
         )
         sys.exit(1)
-    n_skills_jobs = skills_df["job_id"].nunique()
+    jobs_df = pd.read_csv(combined_path, encoding="utf-8-sig")
+    if jobs_df.empty:
+        sys.stderr.write("ERROR: combined.csv is empty.\n")
+        sys.exit(1)
+
     n_jobs = len(jobs_df)
-    logger.info(
-        "Data: %d skill rows across %d jobs | %d job records loaded",
-        len(skills_df), n_skills_jobs, n_jobs,
-    )
-
-    return skills_df, jobs_df
+    logger.info("Data: %d job records loaded from combined.csv", n_jobs)
+    return jobs_df
 
 
-def build_engine(skills_df):
-    """Fit and return RecommendationEngine."""
+def build_engine(jobs_df):
+    """Fit RecommendationEngine từ jobs_df — parse cột skills (string list) thành long-format.
+
+    combined.csv lưu `skills` dạng chuỗi Python literal (vd "['Python', 'SQL']").
+    Một số cell không parse được (text mô tả) → bỏ qua, log count.
+    """
+    import ast
     engine = RecommendationEngine()
+
+    if "skills" not in jobs_df.columns:
+        sys.stderr.write("ERROR: combined.csv missing 'skills' column.\n")
+        sys.exit(1)
+
+    long_rows = []
+    n_skipped = 0
+    for job_id, raw in zip(jobs_df["job_id"], jobs_df["skills"]):
+        if pd.isna(raw) or not str(raw).strip():
+            continue
+        try:
+            skills = ast.literal_eval(str(raw))
+        except Exception:
+            n_skipped += 1
+            continue
+        if isinstance(skills, list):
+            for skill in skills:
+                if skill and str(skill).strip():
+                    long_rows.append({"job_id": job_id, "skill_name": str(skill).strip()})
+    if not long_rows:
+        sys.stderr.write(
+            f"ERROR: no parseable skills in combined.csv ({n_skipped} cells skipped).\n"
+        )
+        sys.exit(1)
+    if n_skipped:
+        logger.warning("Skipped %d unparseable skills cells", n_skipped)
+
+    skills_df = pd.DataFrame(long_rows)
     engine.fit(skills_df, job_id_col="job_id", skill_col="skill_name")
     return engine
 
@@ -129,6 +140,11 @@ def format_csv(recs):
 
 
 def main():
+    # Windows console cp1252 không in được tiếng Việt — ép UTF-8
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+
     parser = argparse.ArgumentParser(
         description="Recommend jobs by skill profile — content-based filtering.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -150,6 +166,14 @@ def main():
     parser.add_argument(
         "--top-n", type=int, default=10,
         help="Number of recommendations (default: 10)"
+    )
+    parser.add_argument(
+        "--years", type=float, default=None,
+        help="Experience years filter (e.g. 3). Jobs with experience within ±0.5y are kept."
+    )
+    parser.add_argument(
+        "--city", default=None,
+        help="City filter, case-insensitive (e.g. HCMC, Hanoi, Da Nang)."
     )
     parser.add_argument(
         "--output", choices=["text", "csv", "json"], default="text",
@@ -183,13 +207,13 @@ def main():
     user_skills = normalized
 
     try:
-        skills_df, jobs_df = load_data()
+        jobs_df = load_data()
     except Exception as e:
         sys.stderr.write(f"ERROR loading data: {e}\n")
         sys.exit(1)
 
     try:
-        engine = build_engine(skills_df)
+        engine = build_engine(jobs_df)
     except Exception as e:
         sys.stderr.write(f"ERROR building recommendation engine: {e}\n")
         traceback.print_exc(file=sys.stderr)
@@ -202,7 +226,10 @@ def main():
     )
 
     try:
-        recs = engine.recommend(user_skills, jobs_df, top_n=args.top_n)
+        recs = engine.recommend(
+            user_skills, jobs_df, top_n=args.top_n,
+            experience_years=args.years, city=args.city,
+        )
     except Exception as e:
         sys.stderr.write(f"ERROR generating recommendations: {e}\n")
         sys.exit(1)
