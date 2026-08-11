@@ -492,7 +492,12 @@ def verify_report(report_path):
         "[5]",
         "[6]",
         "[7]",
-        "[8]"
+        "[8]",
+        "rq1-rq5",
+        "silhouette 0.38",
+        "hybrid recommendation",
+        "đà nẵng",
+        "salary midpoint"
     ]
     for phrase in key_phrases:
         if normalize_text(phrase) not in doc_full_text:
@@ -571,9 +576,11 @@ def generate_report():
         ("TỔNG QUAN VỀ BÀI TOÁN VÀ CƠ SỞ LÝ THUYẾT", FULL_CONTENT["CHƯƠNG 1 TỔNG QUAN VỀ BÀI TOÁN VÀ CƠ SỞ LÝ THUYẾT"]),
         ("PHƯƠNG PHÁP NGHIÊN CỨU VÀ DỮ LIỆU ĐẦU VÀO", FULL_CONTENT["CHƯƠNG 2 PHƯƠNG PHÁP NGHIÊN CỨU VÀ DỮ LIỆU ĐẦU VÀO"]),
         ("QUẢ THỰC NGHIỆM VÀ ĐÁNH GIÁ", FULL_CONTENT["CHƯƠNG 3 QUẢ THỰC NGHIỆM VÀ ĐÁNH GIÁ"]),
-        ("KẾT LUẬN", FULL_CONTENT["KẾT LUẬN"]),
-        # REFERENCE_ITEMS phải wrap thành list tuple (item, "") — insert_content_after_paragraph duyệt for sub_title, sub_body in content_list
+        # TÀI LIỆU THAM THẢO xử lý TRƯỚC KẾT LUẬN: clear_all_after_heading("KẾT LUẬN")
+        # xóa mọi thứ sau heading KẾT LUẬN (refs ResNet50 cũ) — nếu KẾT LUẬN đã chèn
+        # nội dung mới trước đó, bước này sẽ xóa nhầm cả 3 mục KẾT LUẬN vừa chèn.
         ("TÀI LIỆU THAM THẢO", [(item, "") for item in REFERENCE_ITEMS]),
+        ("KẾT LUẬN", FULL_CONTENT["KẾT LUẬN"]),
     ]
 
     for heading_text, content_list in sections:
