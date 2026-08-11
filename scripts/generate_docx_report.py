@@ -135,6 +135,39 @@ CH2_STATS_TABLE = [
     ["Bản ghi trùng đã loại", "70"],
 ]
 
+# Bảng ánh xạ câu hỏi nghiên cứu (chương 3, mục 3.2)
+CH3_RQ_TABLE = [
+    ["Câu hỏi nghiên cứu", "Trả lời", "Minh chứng"],
+    ["RQ1: Kỹ năng nào được yêu cầu nhiều nhất?",
+     "JavaScript, React, Kafka, Python, SQL, Docker, Spring Boot, TensorFlow", "F1 (EDA)"],
+    ["RQ2: Kinh nghiệm và thành phố ảnh hưởng lương thế nào?",
+     "Lương tăng theo bậc kinh nghiệm (Entry ~10M → Lead ~35M+); TP.HCM & Hà Nội cao hơn rõ rệt", "F2 (EDA)"],
+    ["RQ3: Yêu cầu tiếng Anh ảnh hưởng lương?",
+     "Lương trung bình cao hơn 30%", "F3 (EDA)"],
+    ["RQ4: Tỷ lệ ẩn lương phổ biến ở đâu?",
+     "Vị trí cấp cao (Senior, Manager, Lead) ẩn lương >50%", "F4 (EDA)"],
+    ["RQ5: Việc nào phù hợp với hồ sơ kỹ năng?",
+     "Top-N việc có độ tương đồng cosine cao nhất, kèm kỹ năng còn thiếu", "Mục 3.5"],
+]
+
+# Bảng profile 5 phân khúc tiêu biểu (chương 3, mục 3.4)
+CH3_CLUSTER_TABLE = [
+    ["Cluster", "Tỷ lệ", "Lương TB", "Kinh nghiệm TB", "Đặc điểm"],
+    ["0", "21%", "15.1M", "2.6y", "Junior-Mid, Hà Nội"],
+    ["1", "14%", "27.1M", "2.6y", "Mid-Senior, TP.HCM"],
+    ["4", "10%", "41.9M", "4.8y", "Senior, thu nhập cao"],
+    ["8", "21%", "20.8M", "2.1y", "Mid, đa dạng"],
+    ["9", "4%", "31.6M", "2.7y", "Việc làm Remote"],
+]
+
+# Bảng Top-3 gợi ý việc làm (chương 3, mục 3.5) — minh họa từ demo
+CH3_REC_TABLE = [
+    ["Việc làm", "Similarity", "Kỹ năng khớp", "Kỹ năng thiếu"],
+    ["Data Scientist", "1.0", "Python, SQL, Machine Learning", "—"],
+    ["ML Engineer", "0.67", "Python, Machine Learning", "Docker, Spark"],
+    ["Data Engineer", "0.67", "Python, SQL", "Spark, Airflow"],
+]
+
 # Tài liệu tham khảo (trích dẫn [1]-[10] trong thân bài chương 1)
 REFERENCES = [
     "Géron, A. (2022). Hands-On Machine Learning with Scikit-Learn, Keras & TensorFlow (3rd ed.). O'Reilly Media.",
