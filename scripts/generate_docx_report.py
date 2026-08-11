@@ -411,13 +411,25 @@ def insert_content_after_paragraph(doc, target_paragraph, content_list, make_hea
                 run.font.size = Pt(12)
             current_p = new_p_body
 
-        if "3.2. Kết quả Đánh giá Mô hình Dự báo Lương" in sub_title:
+        if "3.3. Kết quả Đánh giá Mô hình Dự báo Lương" in sub_title:
             print("    [Table] Inserting ML results table...")
             insert_table_after_paragraph(new_p_body, ML_RESULTS_TABLE)
 
         if sub_title.startswith('__TABLE_CH2__'):
             print("    [Table] Inserting chapter-2 stats table...")
             insert_table_after_paragraph(new_p_body, CH2_STATS_TABLE)
+
+        if sub_title.startswith('__TABLE_CH3_RQ__'):
+            print("    [Table] Inserting chapter-3 RQ mapping table...")
+            insert_table_after_paragraph(new_p_body, CH3_RQ_TABLE)
+
+        if sub_title.startswith('__TABLE_CH3_CLUSTER__'):
+            print("    [Table] Inserting chapter-3 cluster profile table...")
+            insert_table_after_paragraph(new_p_body, CH3_CLUSTER_TABLE)
+
+        if sub_title.startswith('__TABLE_CH3_REC__'):
+            print("    [Table] Inserting chapter-3 top-N rec table...")
+            insert_table_after_paragraph(new_p_body, CH3_REC_TABLE)
 
 # --- VERIFICATION ---
 def verify_report(report_path):
@@ -464,7 +476,23 @@ def verify_report(report_path):
         "ColumnTransformer",
         "handle_unknown",
         "OrdinalEncoder",
-        "80/20"
+        "80/20",
+        "3.2",
+        "RQ1",
+        "Error Analysis",
+        "phân tích sai số",
+        "0.38",
+        "k=10",
+        "1500",
+        "45 kỹ năng",
+        "Top-N",
+        "53.5%",
+        "93.3%",
+        "[4]",
+        "[5]",
+        "[6]",
+        "[7]",
+        "[8]"
     ]
     for phrase in key_phrases:
         if normalize_text(phrase) not in doc_full_text:
