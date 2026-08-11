@@ -499,7 +499,9 @@ def verify_report(report_path):
             found_issues.append(f"Thiếu nội dung: '{phrase}'")
 
     # Kiểm tra xem các cụm từ cũ về ResNet50 có bị sót lại không
-    old_phrases = ["resnet50", "rác thải", "chuyển đổi ô nhiễm"]
+    # (TOC template gốc là bản cũ của đề tài ResNet50 — user refresh thủ công trong Word,
+    #  chỉ bắt các entry/nội dung cũ liên quan trực tiếp: resnet, ô nhiễm, nghiên cứu trước...)
+    old_phrases = ["resnet50", "rác thải", "chuyển đổi ô nhiễm", "ô nhiễm không khí", "nghiên cứu trước"]
     found_old = []
     for old_p in old_phrases:
         if old_p in doc_full_text:
@@ -549,16 +551,19 @@ def generate_report():
         elif "tháng 6 năm 2026" in txt or "tháng 8 năm 2026" in txt:
             p.text = COVER_PAGE_DATA["DATE"]
 
-    # 2. Xóa các entry TOC cũ (ResNet50 + chương 2 cũ) — TOC nằm trước LỜI MỞ ĐẦU nên clear_existing không đụng tới
+    # 2. Xóa các entry TOC cũ (ResNet50 + chương 2 cũ + chương 3 cũ) — TOC nằm trước LỜI MỞ ĐẦU nên clear_existing không đụng tới
     toc_removed = 0
     for p in list(doc.paragraphs):
         if p.style.name.startswith('toc') or p.style.name.startswith('TOC'):
             ptext = p.text.lower()
             if ('resnet' in ptext or 'phân loại rác' in ptext or 'rác thải' in ptext
-                    or 'dataset' in ptext or 'luồng xử lý' in ptext or 'mô hình học máy' in ptext):
+                    or 'dataset' in ptext or 'luồng xử lý' in ptext or 'mô hình học máy' in ptext
+                    or 'ô nhiễm' in ptext or 'nghiên cứu trước' in ptext
+                    or 'độ đo đánh giá' in ptext or 'confusion matrix' in ptext
+                    or 'đối sánh nghiên cứu' in ptext):
                 p._p.getparent().remove(p._p)
                 toc_removed += 1
-    print(f"Removed {toc_removed} old TOC entries (resnet + chương 2 cũ)")
+    print(f"Removed {toc_removed} old TOC entries (resnet + chương 2/3 cũ)")
 
     # 3. Xóa mục cũ và chèn nội dung mới
     sections = [
