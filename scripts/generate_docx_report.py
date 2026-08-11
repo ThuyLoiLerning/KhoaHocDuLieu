@@ -77,9 +77,24 @@ FULL_CONTENT = {
     ],
     "CHƯƠNG 2 PHƯƠNG PHÁP NGHIÊN CỨU VÀ DỮ LIỆU ĐẦU VÀO": [
         ("2.1. Kiến trúc Hệ thống Thu thập Dữ liệu (Crawler v2)",
-         "Hệ thống sử dụng bộ thu thập dữ liệu đa nguồn (Crawler v2) được tối ưu hóa cho các cấu trúc web hiện đại. Kỹ thuật trích xuất bao gồm JSON-LD Parsing, __NEXT_DATA__ Extraction và HTML Parsing (BeautifulSoup). Hệ thống đã thu thập thành công 1.193 bản ghi việc làm (JobRecords) với 44 thuộc tính chi tiết từ Itviec, Glints, TopCV và Careerviet. Dữ liệu thô được lưu dưới cả định dạng CSV và JSON cho mỗi nguồn."),
-        ("2.2. Quy trình Chuẩn hóa và Làm sạch Dữ liệu (Data Cleaning Pipeline)",
-         "Dữ liệu thô sau khi thu thập luôn chứa đựng nhiều nhiễu. Quy trình làm sạch bao gồm:\n- Chuẩn hóa Lương (SalaryParser): Xử lý 6 biểu thức chính quy (regex patterns) cho các định dạng lương khác nhau, chuyển đổi USD/VND, quy đổi lương năm/tháng, xử lý khoảng lương và gán cờ ẩn lương. Tỷ lệ ẩn lương ghi nhận thực tế là 56%.\n- Chuẩn hóa Kỹ năng (SkillNormalizer): Xây dựng từ điển đồng nghĩa (188 quy tắc ánh xạ) về 45 tên chuẩn hóa. Sử dụng so khớp mờ (Fuzzy Matching với ngưỡng > 0.8) cho các lỗi gõ và biến thể chưa có trong từ điển. Chỉ 6.6% tổng số jobs có thông tin kỹ năng chi tiết.\n- Chuẩn hóa Kinh nghiệm (ExperienceNormalizer): Trích xuất số năm kinh nghiệm và phân nhóm vào các bậc chuẩn hóa (Entry, Junior, Mid, Senior, Lead).\n- Khử Trùng lặp Dữ liệu (Deduplicator): Áp dụng quy trình 4 pha (trùng lặp chính xác theo job_id, theo (title, company), mờ theo job_title, mờ theo description_raw) đã loại bỏ 70 bản ghi trùng lặp.")
+         "Hệ thống thu thập dữ liệu được thiết kế theo kiến trúc đa tầng, vận hành qua hàm điều phối run_crawl() trong src/crawl/pipeline.py. Luồng tổng thể thực hiện vòng lặp lồng nhau site × keyword với 22 keyword tìm kiếm (python, java, react, data, devops, machine learning, golang...), mỗi tổ hợp crawl tối đa 2 trang. Trước khi ghi dữ liệu, hệ thống kiểm tra ngưỡng min_total_jobs: nếu tổng số bản ghi thu được dưới ngưỡng, toàn bộ lần chạy bị từ chối (không ghi CSV) nhằm tránh ghi nhận dữ liệu lỗi từ các trang bị chặn. Mỗi lần chạy ghi một file crawl_history JSON (timestamp, n_jobs, n_new, src_counts) phục vụ kiểm toán và theo dõi mức độ mới của dữ liệu.\nKết nối HTTP được đóng gói trong lớp HttpClient dùng thư viện httpx với verify=True, follow_redirects=True và timeout 20 giây. Để giảm nguy cơ bị chặn bởi cơ chế chống bot, hệ thống xoay vòng 3 User-Agent (Chrome, Firefox, Safari) ngẫu nhiên mỗi request, áp dụng rate-limit ngẫu nhiên 1–3 giây giữa các yêu cầu và retry khi gặp mã lỗi 429. Trang trả về bị phát hiện chặn thông qua danh sách BLOCKED_MARKERS (cf-challenge, captcha, access denied...) so khớp trên 20.000 ký tự đầu của HTML.\nVề kỹ thuật trích xuất, Crawler v2 hỗ trợ đồng thời 4 phương pháp tương ứng với cấu trúc trang hiện đại: (1) JSON-LD Parsing — đọc dữ liệu có cấu trúc nhúng trong thẻ <script type=\"application/ld+json\">; (2) __NEXT_DATA__ Extraction — lấy JSON state nhúng trong trang Next.js; (3) HTML Parsing bằng BeautifulSoup [10] cho trang tĩnh; (4) API JSON — gọi trực tiếp endpoint trả dữ liệu JSON. Dữ liệu thô sau thu thập được chuẩn hóa thành domain objects (JobPosting, Skill, Company) và lưu đồng thời cả CSV lẫn JSON theo từng nguồn vào data/raw/ (yêu cầu B6), kèm log source_metadata ghi nguồn gốc từng bản ghi."),
+        ("2.2. Quy trình Chuẩn hóa và Làm sạch Dữ liệu",
+         "Dữ liệu thô sau thu thập chứa nhiều nhiễu và biến thể ngôn ngữ; theo McKinney [9], làm sạch dữ liệu chiếm phần lớn thời gian trong pipeline phân tích dữ liệu. Quy trình chuẩn hóa gồm 4 module chuyên biệt, mỗi module xử lý một khía cạnh của dữ liệu tuyển dụng phi cấu trúc."),
+        ("2.2.1. Chuẩn hóa Lương (SalaryParser)",
+         "SalaryParser trong src/data/salary_parser.py nhận diện 8 loại cấu trúc lương (SalaryType): RANGE (khoảng), UP_TO (tối đa), FROM (tối thiểu), YEARLY (lương năm), USD (ngoại tệ), HIDDEN (ẩn), SINGLE (giá trị đơn) và UNKNOWN. Quá trình parse dùng 6 nhóm biểu thức chính quy được sắp xếp theo độ đặc hiệu giảm dần: ưu tiên lương năm trước, rồi USD, khoảng, tối đa, tối thiểu và cuối cùng giá trị đơn. Quy đổi tiền tệ dùng tỷ giá 1 USD = 25.000 VND; lương theo năm chia cho 12 để quy về tháng; khoảng \"tới X\" ước lượng mức giữa bằng 70% mức tối đa, \"từ X\" bằng 130% mức tối thiểu [1]. Các mức lương dạng ẩn được nhận diện qua 24+ từ khóa (cạnh tranh, thỏa thuận, negotiable, face to face, liên hệ...) gán cờ is_hidden. Kết quả thực tế trên dữ liệu: tỷ lệ ẩn lương ghi nhận là 56% — phản ánh đặc thù thị trường tuyển dụng Việt Nam, và lý do cần cột salary_mid làm biến mục tiêu cho các mô hình dự báo."),
+        ("2.2.2. Chuẩn hóa Kỹ năng (SkillNormalizer)",
+         "SkillNormalizer xây dựng từ điển đồng nghĩa gồm 188 quy tắc ánh xạ chuẩn hóa các biến thể viết tắt, viết hoa sai, tên tiếng Anh/tiếng Việt về 45 tên kỹ năng chuẩn hóa (canonical), được phân nhóm vào 12 nhóm kỹ năng như Programming Language, Frontend Framework, Database, Cloud, DevOps, Data Science, Mobile, Testing, Language, Soft Skill, Tool, Other. Ví dụ: js → JavaScript, python3 → Python, reactjs → React, k8s → Kubernetes. Với các biến thể chưa có trong từ điển (lỗi gõ, gõ không dấu), module dùng fuzzy matching với ngưỡng tương đồng > 0.8 để so khớp gần đúng. Độ phủ kỹ năng thực tế chỉ đạt 6.6% tổng số tin tuyển dụng do giới hạn hiển thị của các nguồn (Careerviet/TopCV không công khai mô tả kỹ năng chi tiết), được ghi nhận như một hạn chế dữ liệu trong Chương 3."),
+        ("2.2.3. Chuẩn hóa Kinh nghiệm (ExperienceNormalizer)",
+         "ExperienceNormalizer dùng 6 nhóm biểu thức chính quy hỗ trợ cả tiếng Việt (có dấu và không dấu) lẫn tiếng Anh để parse số năm kinh nghiệm: khoảng (2–5 năm), tối thiểu (từ 3 năm, 3+ năm), tối đa (tới 5 năm, dưới 5 năm), chính xác (3 năm), lớn hơn (trên 5 năm) và trường hợp zero (fresher, mới ra trường, chưa có kinh nghiệm). Giá trị số năm sau đó được phân vào 5 bậc kinh nghiệm chuẩn hóa: entry (0–1 năm), junior (1–3), mid (3–5), senior (5–8) và lead (8+ năm). Nếu trường kinh nghiệm bị thiếu, module fallback tìm kiếm trong mô tả công việc (description_raw) trước khi từ bỏ, đảm bảo tối đa hóa độ phủ của đặc trưng này."),
+        ("2.2.4. Khử Trùng lặp (Deduplicator)",
+         "Deduplicator phát hiện và loại bỏ các bản ghi trùng lặp qua 4 pha tuần tự: (1) khớp chính xác theo job_id; (2) khớp chính xác theo cặp title + company; (3) khớp mờ theo job_title dùng SequenceMatcher với ngưỡng ≥ 0.8; (4) khớp mờ theo description_raw với ngưỡng ≥ 0.7. Kết quả trên toàn bộ dữ liệu đã loại bỏ 70 bản ghi trùng lặp, đảm bảo mỗi tin tuyển dụng chỉ tồn tại một lần trong tập dữ liệu cuối."),
+        ("2.3. Xây dựng Đặc trưng và Tiền xử lý cho Học máy",
+         "Sau làm sạch, dữ liệu được chuyển qua tầng feature engineering (src/features/feature_pipeline.py) để tạo ma trận đặc trưng cho mô hình. Các đặc trưng được nhóm thành 3 loại theo bản chất dữ liệu [3]: nhóm số (numeric) gồm experience_years — xử lý bằng SimpleImputer chiến lược median rồi chuẩn hóa StandardScaler; nhóm phân loại (categorical) gồm city, job_type, remote_option, education_level, industry, company_size — xử lý bằng SimpleImputer điền giá trị \"Unknown\" rồi OneHotEncoder với handle_unknown=\"ignore\" để xử lý nhãn mới khi dự đoán; nhóm thứ tự (ordinal) gồm experience_bin (entry → junior → mid → senior → lead) — xử lý bằng SimpleImputer điền \"unknown\" rồi OrdinalEncoder với unknown_value = −1 cho giá trị chưa biết [3]. Biến mục tiêu là salary_mid (đơn vị triệu VND/tháng) được chuẩn hóa từ lương min/max sau SalaryParser. Các cột thô không phục vụ học máy (job_id, company_id, job_title, description, source_url, crawled_at...) bị loại bỏ; ColumnTransformer cấu hình remainder=\"drop\" để bỏ tự động mọi cột không khai báo. Kiến trúc pipeline này được tái sử dụng cho cả 3 mô hình hồi quy trong Chương 3 [1]."),
+        ("2.4. Tổng quan Dữ liệu sau Xử lý",
+         "Sau toàn bộ pipeline thu thập, làm sạch và chuẩn hóa, tập dữ liệu cuối gồm 1.193 bản ghi việc làm với 44 thuộc tính chi tiết từ 4 nguồn tuyển dụng chính tại Việt Nam. Bảng dưới đây tóm tắt các chỉ số quan trọng của tập dữ liệu sau xử lý:"),
+        ("__TABLE_CH2__ Bảng thống kê dữ liệu", ""),
+        ("",
+         "Dữ liệu sau đó được chia ngẫu nhiên thành tập huấn luyện và tập kiểm tra theo tỷ lệ 80/20, đồng thời sử dụng 5-fold cross-validation để đánh giá độ ổn định của mô hình trên các phân hoạch dữ liệu khác nhau [3]. Chi tiết kết quả huấn luyện và đánh giá được trình bày trong Chương 3.")
     ],
     "CHƯƠNG 3 QUẢ THỰC NGHIỆM VÀ ĐÁNH GIÁ": [
         ("3.1. Phân tích Khám phá Dữ liệu (EDA) và Trả lời Câu hỏi Nghiên cứu",
@@ -107,6 +122,17 @@ ML_RESULTS_TABLE = [
     ["Linear Regression", "4.17", "2.94", "0.783"],
     ["Decision Tree", "0.60", "0.18", "0.996"],
     ["Random Forest", "~0.00", "~0.00", "~1.000"]
+]
+
+# Bảng thống kê dữ liệu sau xử lý (chương 2, mục 2.4)
+CH2_STATS_TABLE = [
+    ["Thuộc tính", "Giá trị"],
+    ["Tổng bản ghi việc làm", "1.193"],
+    ["Số thuộc tính (cột)", "44"],
+    ["Nguồn dữ liệu", "Itviec, Glints, TopCV, Careerviet"],
+    ["Tỷ lệ ẩn lương", "56%"],
+    ["Độ phủ kỹ năng chi tiết", "6.6%"],
+    ["Bản ghi trùng đã loại", "70"],
 ]
 
 # Tài liệu tham khảo (trích dẫn [1]-[10] trong thân bài chương 1)
@@ -347,6 +373,10 @@ def insert_content_after_paragraph(doc, target_paragraph, content_list, make_hea
             print("    [Table] Inserting ML results table...")
             insert_table_after_paragraph(new_p_body, ML_RESULTS_TABLE)
 
+        if sub_title.startswith('__TABLE_CH2__'):
+            print("    [Table] Inserting chapter-2 stats table...")
+            insert_table_after_paragraph(new_p_body, CH2_STATS_TABLE)
+
 # --- VERIFICATION ---
 def verify_report(report_path):
     print(f"\n--- Bắt đầu Verification cho {report_path.name} ---")
@@ -384,7 +414,15 @@ def verify_report(report_path):
         "cos(A,B)",
         "Géron",
         "Rousseeuw",
-        "[1]"
+        "[1]",
+        "22 keyword",
+        "BLOCKED_MARKERS",
+        "2.2.1",
+        "2.2.4",
+        "ColumnTransformer",
+        "handle_unknown",
+        "OrdinalEncoder",
+        "80/20"
     ]
     for phrase in key_phrases:
         if normalize_text(phrase) not in doc_full_text:
@@ -441,14 +479,16 @@ def generate_report():
         elif "tháng 6 năm 2026" in txt or "tháng 8 năm 2026" in txt:
             p.text = COVER_PAGE_DATA["DATE"]
 
-    # 2. Xóa các entry TOC cũ (ResNet50) — TOC nằm trước LỜI MỞ ĐẦU nên clear_existing không đụng tới
+    # 2. Xóa các entry TOC cũ (ResNet50 + chương 2 cũ) — TOC nằm trước LỜI MỞ ĐẦU nên clear_existing không đụng tới
     toc_removed = 0
     for p in list(doc.paragraphs):
         if p.style.name.startswith('toc') or p.style.name.startswith('TOC'):
-            if 'resnet' in p.text.lower():
+            ptext = p.text.lower()
+            if ('resnet' in ptext or 'phân loại rác' in ptext or 'rác thải' in ptext
+                    or 'dataset' in ptext or 'luồng xử lý' in ptext or 'mô hình học máy' in ptext):
                 p._p.getparent().remove(p._p)
                 toc_removed += 1
-    print(f"Removed {toc_removed} old TOC entries containing 'resnet'")
+    print(f"Removed {toc_removed} old TOC entries (resnet + chương 2 cũ)")
 
     # 3. Xóa mục cũ và chèn nội dung mới
     sections = [
