@@ -96,7 +96,7 @@ FULL_CONTENT = {
         ("",
          "Dữ liệu sau đó được chia ngẫu nhiên thành tập huấn luyện và tập kiểm tra theo tỷ lệ 80/20, đồng thời sử dụng 5-fold cross-validation để đánh giá độ ổn định của mô hình trên các phân hoạch dữ liệu khác nhau [3]. Chi tiết kết quả huấn luyện và đánh giá được trình bày trong Chương 3.")
     ],
-    "CHƯƠNG 3 QUẢ THỰC NGHIỆM VÀ ĐÁNH GIÁ": [
+    "CHƯƠNG 3 KẾT QUẢ THỰC NGHIỆM VÀ ĐÁNH GIÁ": [
         ("3.1. Phân tích Khám phá Dữ liệu (EDA)",
          "Thông qua các biểu đồ phân tích (EDA), đề tài đã khảo sát cấu trúc và đặc điểm của bộ dữ liệu gồm 1.193 tin tuyển dụng với 44 thuộc tính [9]. Các phát hiện chính được tổng hợp theo từng nhóm nội dung:\n• F1 - Phân bố Kỹ năng: Nhóm kỹ năng Data Science & Lập trình chiếm tỷ trọng hàng đầu. Top các kỹ năng được yêu cầu nhiều nhất gồm: JavaScript, React, Kafka, Python, SQL, Docker, Spring Boot, TensorFlow.\n• F2 - Tương quan Lương theo Kinh nghiệm & Thành phố: Mức lương trung bình tăng dần theo cấp bậc kinh nghiệm (Entry: ~10M, Lead: ~35M+). Khu vực TP.HCM và Hà Nội có mức lương trung bình cao hơn rõ rệt.\n• F3 - Yếu tố Tiếng Anh: Tin tuyển dụng có yêu cầu tiếng Anh ghi nhận mức lương trung bình cao hơn 30%.\n• F4 - Tỷ lệ Ẩn lương: Các vị trí cấp cao (Senior, Manager, Lead) có tỷ lệ không công khai mức lương vượt mức 50%."),
         ("3.2. Trả lời các Câu hỏi Nghiên cứu",
@@ -197,7 +197,7 @@ MAIN_HEADINGS = [
     "LỜI MỞ ĐẦU",
     "TỔNG QUAN VỀ BÀI TOÁN VÀ CƠ SỞ LÝ THUYẾT",
     "PHƯƠNG PHÁP NGHIÊN CỨU VÀ DỮ LIỆU ĐẦU VÀO",
-    "QUẢ THỰC NGHIỆM VÀ ĐÁNH GIÁ",
+    "KẾT QUẢ THỰC NGHIỆM VÀ ĐÁNH GIÁ",
     "KẾT LUẬN",
     "TÀI LIỆU THAM THẢO"
 ]
@@ -445,7 +445,7 @@ def verify_report(report_path):
         "LỜI MỞ ĐẦU",
         "TỔNG QUAN VỀ BÀI TOÁN VÀ CƠ SỞ LÝ THUYẾT",
         "PHƯƠNG PHÁP NGHIÊN CỨU VÀ DỮ LIỆU ĐẦU VÀO",
-        "QUẢ THỰC NGHIỆM VÀ ĐÁNH GIÁ",
+        "KẾT QUẢ THỰC NGHIỆM VÀ ĐÁNH GIÁ",
         "KẾT LUẬN"
     ]
     for h in expected_headings:
@@ -575,7 +575,7 @@ def generate_report():
         ("LỜI MỞ ĐẦU", FULL_CONTENT["LỜI MỞ ĐẦU"]),
         ("TỔNG QUAN VỀ BÀI TOÁN VÀ CƠ SỞ LÝ THUYẾT", FULL_CONTENT["CHƯƠNG 1 TỔNG QUAN VỀ BÀI TOÁN VÀ CƠ SỞ LÝ THUYẾT"]),
         ("PHƯƠNG PHÁP NGHIÊN CỨU VÀ DỮ LIỆU ĐẦU VÀO", FULL_CONTENT["CHƯƠNG 2 PHƯƠNG PHÁP NGHIÊN CỨU VÀ DỮ LIỆU ĐẦU VÀO"]),
-        ("QUẢ THỰC NGHIỆM VÀ ĐÁNH GIÁ", FULL_CONTENT["CHƯƠNG 3 QUẢ THỰC NGHIỆM VÀ ĐÁNH GIÁ"]),
+        ("KẾT QUẢ THỰC NGHIỆM VÀ ĐÁNH GIÁ", FULL_CONTENT["CHƯƠNG 3 KẾT QUẢ THỰC NGHIỆM VÀ ĐÁNH GIÁ"]),
         # TÀI LIỆU THAM THẢO xử lý TRƯỚC KẾT LUẬN: clear_all_after_heading("KẾT LUẬN")
         # xóa mọi thứ sau heading KẾT LUẬN (refs ResNet50 cũ) — nếu KẾT LUẬN đã chèn
         # nội dung mới trước đó, bước này sẽ xóa nhầm cả 3 mục KẾT LUẬN vừa chèn.
