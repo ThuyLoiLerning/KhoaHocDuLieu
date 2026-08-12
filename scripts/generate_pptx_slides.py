@@ -659,6 +659,20 @@ def verify():
     for phrase in ["1.193", "4.17", "0.38", "1500", "56%", "6.6%"]:
         if phrase not in all_text:
             issues.append(f"Thiếu số liệu: '{phrase}'")
+    # Nền trắng: không còn nền tối cũ trên slide bất kỳ
+    for i, s in enumerate(slides, 1):
+        bg = s.background.fill
+        if bg.type is not None and bg.fore_color.type is not None:
+            c = bg.fore_color.rgb
+            if c == RGBColor(0x1E, 0x1E, 0x2E):
+                issues.append(f"Slide {i} vẫn dùng nền tối cũ")
+    # Stat cards: slide 2, 9, 20 mỗi slide ≥ 4 shape là hình chữ nhật (stat card)
+    from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE
+    for idx in (1, 8, 19):
+        n_rect = sum(1 for sh in slides[idx].shapes
+                     if sh.shape_type == MSO_AUTO_SHAPE_TYPE.RECTANGLE)
+        if n_rect < 4:
+            issues.append(f"Slide {idx + 1} thiếu stat cards (rect < 4)")
     if issues:
         print("VERIFICATION FAILED:")
         for i in issues:
