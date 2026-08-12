@@ -14,12 +14,17 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_PPTX = PROJECT_ROOT / "reports" / "slides" / "TrinhBay_ChuyenDe4.pptx"
 CHARTS_DIR = PROJECT_ROOT / "reports" / "slides" / "charts"
 
-# --- Màu sắc ---
-BG = RGBColor(0x1E, 0x1E, 0x2E)
-WHITE = RGBColor(0xFF, 0xFF, 0xFF)
-CYAN = RGBColor(0x00, 0xBC, 0xD4)
-GRAY = RGBColor(0xB0, 0xB0, 0xC0)
-TABLE_ALT = RGBColor(0x2A, 0x2A, 0x3E)
+# --- Màu sắc (nền trắng học thuật) ---
+BG = RGBColor(0xFF, 0xFF, 0xFF)          # nền trắng
+WHITE = RGBColor(0xFF, 0xFF, 0xFF)       # chữ trắng trên nền màu
+INK = RGBColor(0x1F, 0x29, 0x37)         # chữ chính
+SUB = RGBColor(0x6B, 0x72, 0x80)         # chữ phụ
+BLUE = RGBColor(0x25, 0x63, 0xEB)        # accent chính
+AMBER = RGBColor(0xF5, 0x9E, 0x0B)       # accent phụ (số liệu)
+CARD_BG = RGBColor(0xEF, 0xF6, 0xFF)     # card nền
+CARD_BORDER = RGBColor(0xBF, 0xDB, 0xFE) # card viền
+TABLE_ALT = RGBColor(0xF3, 0xF4, 0xF6)   # hàng bảng xen kẽ
+BOX_BG = RGBColor(0xF8, 0xFA, 0xFC)      # box pipeline nền
 FONT_NAME = "Calibri"
 
 
@@ -82,17 +87,69 @@ def _set_text(tf, text, size, color, bold=False, align=PP_ALIGN.LEFT):
     return tf
 
 
+SECTION_BADGES = {
+    range(1, 4): "GIỚI THIỆU",
+    range(4, 9): "PHƯƠNG PHÁP",
+    range(9, 12): "PHÂN TÍCH",
+    range(12, 20): "KẾT QUẢ",
+    range(20, 23): "KẾT LUẬN",
+}
+
+
+def _badge(slide, text, x=10.6, y=0.42, w=2.3, h=0.42):
+    """Pill badge góc phải: nền xanh nhạt, chữ xanh đậm."""
+    box = slide.shapes.add_shape(5, Inches(x), Inches(y), Inches(w), Inches(h))  # roundRect
+    box.fill.solid()
+    box.fill.fore_color.rgb = CARD_BG
+    box.line.color.rgb = CARD_BORDER
+    box.line.width = Pt(0.75)
+    tf = box.text_frame
+    tf.margin_left = tf.margin_right = Inches(0.04)
+    tf.margin_top = tf.margin_bottom = Inches(0.02)
+    p = tf.paragraphs[0]
+    p.alignment = PP_ALIGN.CENTER
+    r = p.add_run()
+    r.text = text
+    _r(r, 11, BLUE, bold=True)
+
+
 def add_title_bar(slide, title, num=None):
-    # Thanh accent trên cùng
-    bar = slide.shapes.add_shape(1, Inches(0), Inches(0), Inches(13.33), Inches(0.08))
-    bar.fill.solid()
-    bar.fill.fore_color.rgb = CYAN
-    bar.line.fill.background()
-    # Tiêu đề
+    """Thanh tiêu đề: tiêu đề đen đậm + vạch accent + badge section."""
     label = f"{num}. {title}" if num else title
-    tb = slide.shapes.add_textbox(Inches(0.5), Inches(0.35), Inches(12.3), Inches(0.9))
-    _set_text(tb.text_frame, label, 28, CYAN, bold=True)
+    tb = slide.shapes.add_textbox(Inches(0.5), Inches(0.28), Inches(12.3), Inches(0.85))
+    tf = tb.text_frame
+    tf.word_wrap = True
+    p = tf.paragraphs[0]
+    r = p.add_run()
+    r.text = label
+    _r(r, 28, INK, bold=True)
+    # Vạch accent dưới tiêu đề
+    bar = slide.shapes.add_shape(1, Inches(0.55), Inches(1.12), Inches(1.6), Inches(0.06))
+    bar.fill.solid()
+    bar.fill.fore_color.rgb = BLUE
+    bar.line.fill.background()
+    # Badge section (bỏ qua nếu không có num)
+    if num:
+        for rng, label_b in SECTION_BADGES.items():
+            if num in rng:
+                _badge(slide, label_b)
+                break
     return tb
+
+
+def _rich_para(p, text, size, base_color, accent):
+    """Thêm runs cho 1 paragraph: đoạn **...** in đậm màu accent, còn lại màu base."""
+    first = True
+    for i, seg in enumerate(text.split("**")):
+        if not seg:
+            continue
+        r = p.add_run() if first else p.add_run()
+        if p.runs and first:
+            r = p.runs[0]
+        r.text = seg
+        bold = (i % 2 == 1)
+        _r(r, size, accent if bold else base_color, bold=bold)
+        first = False
 
 
 def add_bullets(slide, bullets, top=1.4, left=0.6, width=12.1, height=5.6, size=17):
@@ -108,11 +165,9 @@ def add_bullets(slide, bullets, top=1.4, left=0.6, width=12.1, height=5.6, size=
         p = tf.paragraphs[0] if first else tf.add_paragraph()
         first = False
         p.level = level
-        for run in p.runs:  # xóa mặc định
-            run.text = ""
-        r = p.add_run()
-        r.text = ("• " if level == 0 else "– ") + text
-        _r(r, size if level == 0 else size - 2, WHITE if level == 0 else GRAY)
+        bullet_char = "• " if level == 0 else "– "
+        _rich_para(p, bullet_char + text, size if level == 0 else size - 2,
+                   INK if level == 0 else SUB, BLUE)
         p.space_after = Pt(8 if level == 0 else 4)
     return tb
 
@@ -132,16 +187,16 @@ def add_table_slide(prs, title, data, num=None, col_widths=None, note=None):
         for c_i, val in enumerate(row):
             cell = tbl.cell(r_i, c_i)
             cell.fill.solid()
-            cell.fill.fore_color.rgb = CYAN if r_i == 0 else (TABLE_ALT if r_i % 2 else BG)
+            cell.fill.fore_color.rgb = BLUE if r_i == 0 else (TABLE_ALT if r_i % 2 else BG)
             tf = cell.text_frame
             tf.word_wrap = True
             p = tf.paragraphs[0]
             r = p.add_run()
             r.text = str(val)
-            _r(r, 13, WHITE, bold=(r_i == 0))
+            _r(r, 13, WHITE if r_i == 0 else INK, bold=(r_i == 0))
     if note:
         tb = slide.shapes.add_textbox(Inches(0.6), Inches(6.6), Inches(12.1), Inches(0.6))
-        _set_text(tb.text_frame, note, 14, GRAY)
+        _set_text(tb.text_frame, note, 14, SUB)
     return slide
 
 
@@ -153,12 +208,10 @@ def _img_size_px(path):
 
 def _add_pic(slide, path, x, y, w, h, caption, cap_w=None):
     pic = slide.shapes.add_picture(str(path), Inches(x), Inches(y), Inches(w), Inches(h))
-    pic.line.color.rgb = TABLE_ALT
-    pic.line.width = Pt(1)
     cw = cap_w if cap_w else w + 0.2
     tb = slide.shapes.add_textbox(Inches(x - 0.1), Inches(y + h + 0.05),
                                   Inches(cw), Inches(0.35))
-    _set_text(tb.text_frame, caption, 12, GRAY)
+    _set_text(tb.text_frame, caption, 12, SUB)
 
 
 def add_chart_slide(prs, title, charts, num=None):
@@ -229,9 +282,9 @@ def add_flow_slide(prs, title, steps, num=None):
         x = x_start + i * (box_w + gap)
         box = slide.shapes.add_shape(1, Inches(x), Inches(y), Inches(box_w), Inches(box_h))
         box.fill.solid()
-        box.fill.fore_color.rgb = TABLE_ALT
-        box.line.color.rgb = CYAN
-        box.line.width = Pt(1)
+        box.fill.fore_color.rgb = BOX_BG
+        box.line.color.rgb = BLUE
+        box.line.width = Pt(1.25)
         tf = box.text_frame
         tf.word_wrap = True
         tf.margin_left = Inches(0.08)
@@ -241,17 +294,17 @@ def add_flow_slide(prs, title, steps, num=None):
         p = tf.paragraphs[0]
         r = p.add_run()
         r.text = st["title"]
-        _r(r, 14, CYAN, bold=True)
+        _r(r, 14, BLUE, bold=True)
         for line in st["lines"]:
             p2 = tf.add_paragraph()
             r2 = p2.add_run()
             r2.text = line
-            _r(r2, 10, WHITE)
+            _r(r2, 10, INK)
             p2.space_before = Pt(1)
         if i < n - 1:
             arr = slide.shapes.add_textbox(Inches(x + box_w + 0.02), Inches(y + box_h / 2 - 0.2),
                                            Inches(gap - 0.04), Inches(0.5))
-            _set_text(arr.text_frame, "→", 20, CYAN, bold=True, align=PP_ALIGN.CENTER)
+            _set_text(arr.text_frame, "→", 20, BLUE, bold=True, align=PP_ALIGN.CENTER)
     add_bullets(slide, [
         ("B1 — Crawler v2: 3 User-Agent xoay vòng, rate-limit 1-3s, 22 keyword × 4 nguồn, 1.193 tin", 0),
         ("Trích lọc JSON-LD, __NEXT_DATA__, HTML, API — lưu raw CSV + JSON kèm source_metadata", 1),
@@ -290,27 +343,27 @@ def add_shap_slide(prs, title, file, caption, bullets, num=None):
 def add_title_slide(prs):
     slide = new_slide(prs)
     bar = slide.shapes.add_shape(1, Inches(0), Inches(0), Inches(13.33), Inches(0.12))
-    bar.fill.solid(); bar.fill.fore_color.rgb = CYAN; bar.line.fill.background()
+    bar.fill.solid(); bar.fill.fore_color.rgb = BLUE; bar.line.fill.background()
     tb = slide.shapes.add_textbox(Inches(1.0), Inches(2.2), Inches(11.3), Inches(1.8))
     _set_text(tb.text_frame,
               "PHÂN TÍCH THỊ TRƯỜNG VIỆC LÀM IT &\nGỢI Ý ỨNG VIÊN BẰNG MACHINE LEARNING",
-              34, WHITE, bold=True, align=PP_ALIGN.CENTER)
+              34, INK, bold=True, align=PP_ALIGN.CENTER)
     tb2 = slide.shapes.add_textbox(Inches(1.0), Inches(4.2), Inches(11.3), Inches(1.5))
     _set_text(tb2.text_frame,
               "Chuyên đề 4 — Lập trình cho Khoa học Dữ liệu\n"
               "Học viên: Nguyễn Minh Tan — GVHD: TS. Hoàng Văn Quý\n"
               "Tháng 8 năm 2026",
-              18, GRAY, align=PP_ALIGN.CENTER)
+              18, SUB, align=PP_ALIGN.CENTER)
     return slide
 
 
 def add_thanks_slide(prs):
     slide = new_slide(prs)
     tb = slide.shapes.add_textbox(Inches(1.0), Inches(2.8), Inches(11.3), Inches(1.5))
-    _set_text(tb.text_frame, "CẢM ƠN THẦY CÔ VÀ CÁC BẠN\nĐÃ LẮNG NGHE!", 40, CYAN, bold=True,
+    _set_text(tb.text_frame, "CẢM ƠN THẦY CÔ VÀ CÁC BẠN\nĐÃ LẮNG NGHE!", 40, BLUE, bold=True,
               align=PP_ALIGN.CENTER)
     tb2 = slide.shapes.add_textbox(Inches(1.0), Inches(4.6), Inches(11.3), Inches(0.8))
-    _set_text(tb2.text_frame, "Q&A", 20, GRAY, align=PP_ALIGN.CENTER)
+    _set_text(tb2.text_frame, "Q&A", 20, SUB, align=PP_ALIGN.CENTER)
     return slide
 
 
