@@ -360,7 +360,8 @@ def build():
     add_content_slide(prs, "Crawler v2 — Thu thập dữ liệu", [
         ("Vòng lặp site × keyword (22 keyword), ngưỡng min_total_jobs, crawl_history JSON", 0),
         ("HttpClient (httpx) bật xác thực SSL, tự theo redirect, timeout 20s — hạn chế lỗi kết nối bị chặn", 0),
-        ("Chống chặn: xoay vòng 3 User-Agent, rate-limit 1-3s, retry khi trả HTTP 429, nhận diện trang chặn qua BLOCKED_MARKERS (captcha, cf-challenge)", 0),
+        ("Chống chặn: xoay vòng 3 User-Agent, rate-limit 1-3s, retry khi trả HTTP 429", 0),
+        ("Nhận diện trang chặn qua BLOCKED_MARKERS (captcha, cf-challenge)", 0),
         ("4 kỹ thuật trích xuất:", 0),
         ("JSON-LD Parsing — dữ liệu nhúng <script type=\"application/ld+json\">", 1),
         ("__NEXT_DATA__ Extraction — JSON state của trang Next.js", 1),
