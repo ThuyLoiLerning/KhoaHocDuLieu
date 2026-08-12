@@ -210,6 +210,64 @@ def _pair_h(charts, ch):
     return 0
 
 
+def add_flow_slide(prs, title, steps, num=None):
+    """Slide pipeline: 4 box sơ đồ flow ngang + mô tả chi tiết từng bước (bullets) bên dưới.
+
+    steps: list dict {"title", "lines"(list str)} — vẽ box TABLE_ALT, tiêu đề cyan,
+    mũi tên '→' giữa các box, rồi bullets mô tả phía dưới.
+    """
+    slide = new_slide(prs)
+    add_title_bar(slide, title, num)
+    n = len(steps)
+    box_w, box_h, gap = 2.85, 1.75, 0.35
+    total_w = n * box_w + (n - 1) * gap
+    x_start = (13.33 - total_w) / 2
+    y = 1.35
+    for i, st in enumerate(steps):
+        x = x_start + i * (box_w + gap)
+        box = slide.shapes.add_shape(1, Inches(x), Inches(y), Inches(box_w), Inches(box_h))
+        box.fill.solid()
+        box.fill.fore_color.rgb = TABLE_ALT
+        box.line.color.rgb = CYAN
+        box.line.width = Pt(1)
+        tf = box.text_frame
+        tf.word_wrap = True
+        tf.margin_left = Inches(0.08)
+        tf.margin_right = Inches(0.08)
+        tf.margin_top = Inches(0.06)
+        tf.margin_bottom = Inches(0.06)
+        p = tf.paragraphs[0]
+        r = p.add_run()
+        r.text = st["title"]
+        r.font.name = "Calibri"
+        r.font.size = Pt(15)
+        r.font.color.rgb = CYAN
+        r.font.bold = True
+        for line in st["lines"]:
+            p2 = tf.add_paragraph()
+            r2 = p2.add_run()
+            r2.text = line
+            r2.font.name = "Calibri"
+            r2.font.size = Pt(11)
+            r2.font.color.rgb = WHITE
+            p2.space_before = Pt(2)
+        if i < n - 1:
+            arr = slide.shapes.add_textbox(Inches(x + box_w + 0.02), Inches(y + box_h / 2 - 0.2),
+                                           Inches(gap - 0.04), Inches(0.5))
+            _set_text(arr.text_frame, "→", 20, CYAN, bold=True, align=PP_ALIGN.CENTER)
+    add_bullets(slide, [
+        ("B1 — Thu thập: HTTP client xoay vòng 3 User-Agent, rate-limit 1-3s, crawl 22 keyword × 4 nguồn", 0),
+        ("Trích lọc JSON-LD, __NEXT_DATA__, HTML (BeautifulSoup), API — lưu raw CSV + JSON kèm source_metadata", 1),
+        ("B2 — Làm sạch: SalaryParser (6 regex, USD→VND ×25.000, năm→tháng, 56% tin ẩn lương), SkillNormalizer (188 quy tắc → 45 kỹ năng)", 0),
+        ("ExperienceNormalizer (6 regex TV/EN, 5 bậc entry→lead) · Deduplicator (4 pha, loại 70 bản ghi trùng)", 1),
+        ("B3 — Feature Engineering: ColumnTransformer phân 3 nhóm — numeric (median + StandardScaler), categorical (OneHotEncoder), ordinal (OrdinalEncoder)", 0),
+        ("Loại cột thô (job_id, description...), remainder=\"drop\", target salary_mid (triệu VND/tháng)", 1),
+        ("B4 — ML & Gợi ý: Hồi quy (Baseline, Linear, DT, RF) → RMSE 8.97 → 4.17 → 0.60", 0),
+        ("K-Means k=10 (Silhouette 0.38) phân khúc thị trường · Cosine similarity gợi ý Top-3 việc phù hợp hồ sơ", 1),
+    ], top=3.6, size=14)
+    return slide
+
+
 def add_content_slide(prs, title, bullets, num=None):
     slide = new_slide(prs)
     add_title_bar(slide, title, num)
@@ -290,15 +348,15 @@ def build():
     ], num=3, col_widths=[8, 4.1])
 
     # 4. Kiến trúc hệ thống
-    add_content_slide(prs, "Kiến trúc hệ thống — Pipeline end-to-end", [
-        ("Thu thập dữ liệu (Crawler v2)", 0),
-        ("4 nguồn: Itviec, Glints, TopCV, Careerviet — 22 keyword, 1.193 tin", 1),
-        ("Làm sạch & Chuẩn hóa", 0),
-        ("SalaryParser, SkillNormalizer, ExperienceNormalizer, Deduplicator", 1),
-        ("Feature Engineering", 0),
-        ("ColumnTransformer: numeric / categorical / ordinal — target salary_mid", 1),
-        ("Học máy & Gợi ý", 0),
-        ("Hồi quy (Linear, DT, RF) → Phân cụm (K-Means) → Gợi ý (Cosine similarity)", 1),
+    add_flow_slide(prs, "Kiến trúc hệ thống — Pipeline end-to-end", [
+        {"title": "1. Thu thập dữ liệu",
+         "lines": ["Crawler v2 — 4 nguồn: Itviec, Glints, TopCV, Careerviet", "22 keyword · 1.193 tin"]},
+        {"title": "2. Làm sạch & Chuẩn hóa",
+         "lines": ["SalaryParser · SkillNormalizer", "ExperienceNormalizer · Deduplicator", "loại 70 trùng"]},
+        {"title": "3. Feature Engineering",
+         "lines": ["ColumnTransformer", "numeric / categorical / ordinal", "target: salary_mid"]},
+        {"title": "4. ML & Gợi ý",
+         "lines": ["Hồi quy: Linear, DT, RF", "K-Means k=10 · Cosine similarity", "Top-3 việc phù hợp"]},
     ], num=4)
 
     # 5. Crawler v2
