@@ -217,6 +217,21 @@ def add_content_slide(prs, title, bullets, num=None):
     return slide
 
 
+def add_shap_slide(prs, title, file, caption, bullets, num=None):
+    """Slide SHAP: ảnh summary plot bên trái, bullets giải thích bên phải."""
+    slide = new_slide(prs)
+    add_title_bar(slide, title, num)
+    path = CHARTS_DIR / file
+    w_px, h_px = _img_size_px(path)
+    ar = w_px / h_px
+    w, h = 6.0, 6.0 / ar
+    if h > 5.3:
+        h, w = 5.3, 5.3 * ar
+    _add_pic(slide, path, 0.6, 1.35, w, h, caption)
+    add_bullets(slide, bullets, top=1.35, left=7.0, width=5.8, height=5.3, size=16)
+    return slide
+
+
 def add_title_slide(prs):
     slide = new_slide(prs)
     bar = slide.shapes.add_shape(1, Inches(0), Inches(0), Inches(13.33), Inches(0.12))
@@ -336,9 +351,9 @@ def build():
 
     # 9. EDA
     add_content_slide(prs, "Phân tích khám phá dữ liệu (EDA)", [
-        ("F1 — Phân bố kỹ năng: nhóm Data Science & Lập trình dẫn đầu", 0),
+        ("F1 — Phân bố kỹ năng trên 1.193 tin: nhóm Data Science & Lập trình dẫn đầu", 0),
         ("Top kỹ năng: JavaScript, React, Kafka, Python, SQL, Docker, Spring Boot, TensorFlow", 1),
-        ("F2 — Lương tăng theo bậc kinh nghiệm: Entry ~10M → Lead ~35M+", 0),
+        ("F2 — Lương tăng theo bậc kinh nghiệm: Entry ~10M → Mid ~17M → Senior ~28M → Lead ~35M+", 0),
         ("TP.HCM & Hà Nội có lương trung bình cao hơn rõ rệt", 1),
         ("F3 — Yêu cầu tiếng Anh: lương trung bình cao hơn 30%", 0),
         ("F4 — Vị trí cấp cao (Senior, Manager, Lead): tỷ lệ ẩn lương >50%", 0),
@@ -357,50 +372,69 @@ def build():
     # 12. Kết quả Supervised
     add_table_slide(prs, "Kết quả mô hình dự báo lương", ML_RESULTS_TABLE, num=12,
                     col_widths=[4.5, 2.5, 2.5, 2.6],
-                    note="Error Analysis: 12 trường hợp sai lớn nhất < 2.1M · residual mean ≈ 0, std ≈ 0.6M · DT/RF có dấu hiệu overfit")
+                    note="Giảm RMSE 53.5% (Linear) và 93.3% (DT) so Baseline · 12 sai số lớn nhất < 2.1M · residual mean ≈ 0, std ≈ 0.6M · RF overfit trên tập hiện tại")
 
-    # 13. Kết quả ML — Chart
+    # 13. SHAP — Decision Tree
+    add_shap_slide(prs, "SHAP — Giải thích mô hình Decision Tree", "shap_tree_summary.png",
+                   "SHAP summary plot — nguồn: scripts/generate_shap_plots.py (TreeExplainer)", [
+        ("TreeExplainer tính đóng góp (SHAP value) của 21 đặc trưng cho từng tin tuyển dụng", 0),
+        ("experience_years & nhóm kỹ năng đóng góp lớn nhất — bậc kinh nghiệm là yếu tố quyết định lương", 0),
+        ("Đỏ: đẩy lương lên · xanh: kéo xuống — điểm màu trải rộng phản ánh tác động phi tuyến của DT", 0),
+        ("So với dự đoán baseline (mean lương), SHAP cộng dồn cho biết lương tin cao/thấp hơn bao nhiêu", 0),
+    ], num=13)
+
+    # 14. Kết quả ML — Chart
     add_chart_slide(prs, "Kết quả ML — Chart", [
         {"name": "residuals", "file": "residuals.png",
          "caption": "Residuals — dự đoán vs thực tế (nguồn: notebook 04, cell 18)"},
         {"name": "model_compare", "file": "model_compare.png",
          "caption": "So sánh RMSE / MAE / R² giữa 4 mô hình (nguồn: notebook 04, cell 20)"},
-    ], num=13)
+    ], num=14)
 
-    # 14. K-Means
-    add_table_slide(prs, "Phân cụm thị trường (K-Means)", CH3_CLUSTER_TABLE, num=14,
+    # 15. K-Means
+    add_table_slide(prs, "Phân cụm thị trường (K-Means)", CH3_CLUSTER_TABLE, num=15,
                     col_widths=[1.5, 1.5, 1.8, 2.2, 5.1],
-                    note="Khảo sát k = 2..10 · chọn k = 10 với Silhouette Score = 0.38 · StandardScaler + PCA(2D)")
+                    note="Khảo sát k = 2..10 · chọn k = 10 với Silhouette Score = 0.38 · 5 phân khúc đặc trưng: Junior-Mid HN 15.1M · Mid-Senior TP.HCM 27.1M · Senior 41.9M · Mid đa dạng 20.8M · Remote 31.6M · StandardScaler + PCA(2D)")
 
-    # 15. K-Means — Chart
+    # 16. K-Means — Chart
     add_chart_slide(prs, "K-Means — Chart phân cụm", [
         {"name": "silhouette_scores", "file": "silhouette_scores.png",
          "caption": "Silhouette Score với k = 2..10 (nguồn: notebook 04, cell 24)"},
         {"name": "pca_2d_clusters", "file": "pca_2d_clusters.png",
          "caption": "PCA 2D — 10 cụm trên không gian 2 chiều (nguồn: notebook 04, cell 27)"},
-    ], num=15)
+    ], num=16)
 
-    # 16. Recommendation
-    add_table_slide(prs, "Hệ thống gợi ý việc làm (Content-based)", CH3_REC_TABLE, num=16,
+    # 17. SHAP — Linear
+    add_shap_slide(prs, "SHAP — Giải thích mô hình Linear Regression", "shap_linear_summary.png",
+                   "SHAP summary plot — nguồn: scripts/generate_shap_plots.py (LinearExplainer)", [
+        ("LinearExplainer: SHAP = hệ số × giá trị feature — quan hệ 1:1, dễ đọc", 0),
+        ("Top features khớp với DT (experience_years, nhóm kỹ năng) — kết quả ổn định qua 2 mô hình", 0),
+        ("Độ lớn SHAP là đóng góp tuyệt đối vào lương (triệu VND) — so sánh trực tiếp độ quan trọng", 0),
+        ("Bổ sung cho DT: giải thích tuyến tính thay hộp đen — cùng cấu trúc dữ liệu, cùng thứ tự yếu tố chính", 0),
+    ], num=17)
+
+    # 18. Recommendation
+    add_table_slide(prs, "Hệ thống gợi ý việc làm (Content-based)", CH3_REC_TABLE, num=18,
                     col_widths=[3.2, 1.8, 4.1, 3.0],
-                    note="MultiLabelBinarizer → ma trận 1500 việc × 45 kỹ năng · Cosine similarity · lọc thành phố + kinh nghiệm ±0.5 năm · demo user_skills = [Python, SQL, Machine Learning]")
+                    note="MultiLabelBinarizer → ma trận 1500 việc × 45 kỹ năng · lọc thành phố + phân khúc kinh nghiệm ±0.5 năm trước khi tính cosine → giảm nhiễu · demo user_skills = [Python, SQL, Machine Learning] → Top-3: DS 1.0 · ML Eng 0.67 · DE 0.67")
 
-    # 17. Recommendation — Chart
+    # 19. Recommendation — Chart
     add_chart_slide(prs, "Gợi ý — Chart similarity", [
         {"name": "similarity_dist", "file": "similarity_dist.png",
          "caption": "Phân bố similarity — độ tương đồng hồ sơ với các việc làm (nguồn: notebook 04, cell 33)"},
-    ], num=17)
+    ], num=19)
 
-    # 17. Kết luận
+    # 20. Kết luận
     add_content_slide(prs, "Kết luận", [
         ("Xây dựng hoàn chỉnh pipeline Khoa học Dữ liệu end-to-end, đáp ứng 100% tiêu chí học phần", 0),
         ("Hồi quy: Baseline RMSE 8.97 → Linear 4.17 (R² 0.783, +53.5%) → Decision Tree 0.60 (R² 0.996, +93.3%)", 0),
+        ("SHAP xác nhận experience_years & nhóm kỹ năng là nhân tố chính của lương — nhất quán giữa 2 mô hình", 0),
         ("K-Means k=10, Silhouette 0.38 — 5 phân khúc thị trường rõ rệt", 0),
         ("Content-based: Top-3 phù hợp (Data Scientist, ML Engineer, Data Engineer) kèm kỹ năng còn thiếu", 0),
         ("RQ1-RQ5 đều được trả lời qua EDA (F1-F4) và hệ gợi ý", 0),
-    ], num=18)
+    ], num=20)
 
-    # 19. Hạn chế & Hướng phát triển
+    # 21. Hạn chế & Hướng phát triển
     add_content_slide(prs, "Hạn chế & Hướng phát triển", [
         ("Hạn chế:", 0),
         ("Độ phủ kỹ năng chi tiết chỉ 6.6% (giới hạn hiển thị nguồn)", 1),
@@ -410,7 +444,7 @@ def build():
         ("Crawler truy cập sâu trang chi tiết, đa nguồn, cập nhật theo thời gian", 1),
         ("NLP/BERT trích xuất đặc trưng từ mô tả công việc", 1),
         ("DBSCAN / Hierarchical Clustering; Hybrid Recommendation (collaborative + content-based)", 1),
-    ], num=18)
+    ], num=21)
 
     # 19. Cảm ơn
     add_thanks_slide(prs)
@@ -425,8 +459,8 @@ def verify():
     slides = list(prs.slides)
     n = len(slides)
     issues = []
-    if n != 20:
-        issues.append(f"Số slide = {n}, mong đợi 20")
+    if n != 22:
+        issues.append(f"Số slide = {n}, mong đợi 22")
     # Mỗi slide có text
     for i, s in enumerate(slides, 1):
         texts = []
@@ -445,14 +479,14 @@ def verify():
     tbls9 = [sh.table for sh in slide9.shapes if sh.has_table]
     if not tbls9 or len(tbls9[0].rows) != 7 or len(tbls9[0].columns) != 2:
         issues.append("Slide 9 thiếu bảng thống kê 7×2")
-    # Bảng cluster 6×5 ở slide 14
-    slide14 = slides[13]
-    tbls14 = [sh.table for sh in slide14.shapes if sh.has_table]
-    if not tbls14 or len(tbls14[0].rows) != 6 or len(tbls14[0].columns) != 5:
-        issues.append("Slide 14 thiếu bảng cluster 6×5")
-    # Chart: slide 7, 10, 12, 14, 16 mỗi slide ≥ 1 ảnh; tổng ≥ 10 ảnh
+    # Bảng cluster 6×5 ở slide 15
+    slide15 = slides[14]
+    tbls15 = [sh.table for sh in slide15.shapes if sh.has_table]
+    if not tbls15 or len(tbls15[0].rows) != 6 or len(tbls15[0].columns) != 5:
+        issues.append("Slide 15 thiếu bảng cluster 6×5")
+    # Chart + SHAP: slide 7, 11, 13, 14, 16, 19 mỗi slide ≥ 1 ảnh; tổng ≥ 12 ảnh
     from pptx.enum.shapes import MSO_SHAPE_TYPE
-    chart_slides = {6, 10, 12, 14, 16}
+    chart_slides = {6, 10, 12, 13, 15, 18}
     total_pics = 0
     for i, s in enumerate(slides, 1):
         pics = [sh for sh in s.shapes if sh.shape_type == MSO_SHAPE_TYPE.PICTURE]
@@ -464,8 +498,13 @@ def verify():
                     pic.left + pic.width > Inches(13.33) or
                     pic.top + pic.height > Inches(7.5)):
                 issues.append(f"Slide {i}: ảnh vượt ranh giới slide")
-    if total_pics < 10:
-        issues.append(f"Tổng ảnh chart = {total_pics}, mong đợi ≥ 10")
+    if total_pics < 12:
+        issues.append(f"Tổng ảnh chart = {total_pics}, mong đợi ≥ 12")
+    # Ảnh SHAP (2 slide)
+    for idx in (12, 16):  # slide 13, 17
+        pics = [sh for sh in slides[idx].shapes if sh.shape_type == MSO_SHAPE_TYPE.PICTURE]
+        if not pics:
+            issues.append(f"Slide {idx + 1} thiếu ảnh SHAP")
     # Số liệu chính
     all_text = " ".join(
         sh.text_frame.text for s in slides for sh in s.shapes if sh.has_text_frame).lower()
