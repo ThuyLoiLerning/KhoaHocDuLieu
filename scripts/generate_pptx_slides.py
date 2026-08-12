@@ -334,14 +334,14 @@ def add_flow_slide(prs, title, steps, num=None):
                                            Inches(gap - 0.04), Inches(0.5))
             _set_text(arr.text_frame, "→", 20, BLUE, bold=True, align=PP_ALIGN.CENTER)
     add_bullets(slide, [
-        ("B1 — Crawler v2: 3 User-Agent xoay vòng, rate-limit 1-3s, 22 keyword × 4 nguồn, 1.193 tin", 0),
-        ("Trích lọc JSON-LD, __NEXT_DATA__, HTML, API — lưu raw CSV + JSON kèm source_metadata", 1),
-        ("B2 — SalaryParser (6 regex, USD→VND ×25.000, 56% tin ẩn lương) · SkillNormalizer (188 → 45 kỹ năng)", 0),
-        ("ExperienceNormalizer (5 bậc entry→lead) · Deduplicator (4 pha, loại 70 trùng)", 1),
-        ("B3 — ColumnTransformer 3 nhóm: numeric (median + StandardScaler) · categorical (OneHotEncoder) · ordinal", 0),
-        ("Loại cột thô, remainder=\"drop\", target salary_mid (triệu VND/tháng)", 1),
-        ("B4 — Hồi quy (Baseline → Linear → DT): RMSE 8.97 → 4.17 → 0.60", 0),
-        ("K-Means k=10 (Silhouette 0.38) · Cosine similarity gợi ý Top-3 việc phù hợp", 1),
+        ("**Thu thập dữ liệu:** Crawler v2 xoay vòng 3 User-Agent, giới hạn tốc độ 1-3 giây, chạy 22 từ khóa trên 4 nguồn, thu về 1.193 tin", 0),
+        ("Trích lọc theo 4 kỹ thuật (JSON-LD, __NEXT_DATA__, HTML, API) rồi lưu dạng raw CSV + JSON kèm siêu dữ liệu nguồn", 1),
+        ("**Làm sạch & chuẩn hóa:** SalaryParser đọc 8 cấu trúc lương (56% tin ẩn lương), SkillNormalizer gộp 188 quy tắc thành 45 kỹ năng chuẩn", 0),
+        ("ExperienceNormalizer gán 5 bậc kinh nghiệm từ entry đến lead; Deduplicator loại 70 bản ghi trùng qua 4 pha kiểm tra", 1),
+        ("**Feature Engineering:** ColumnTransformer xử lý 3 nhóm đặc trưng — numeric (trung vị + chuẩn hóa), categorical (OneHot), ordinal", 0),
+        ("Loại bỏ cột thô, mục tiêu là salary_mid tính bằng triệu VND mỗi tháng", 1),
+        ("**Mô hình & gợi ý:** hồi quy giảm RMSE từ 8.97 xuống 4.17 (Linear) rồi 0.60 (Decision Tree)", 0),
+        ("K-Means với k = 10 đạt Silhouette 0.38; cosine similarity gợi ý Top-3 việc phù hợp cho hồ sơ", 1),
     ], top=3.6, size=14)
     return slide
 
