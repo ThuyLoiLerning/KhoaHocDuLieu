@@ -172,7 +172,35 @@ def add_bullets(slide, bullets, top=1.4, left=0.6, width=12.1, height=5.6, size=
     return tb
 
 
-def add_table_slide(prs, title, data, num=None, col_widths=None, note=None):
+def _stat_cards(slide, cards, top, left=0.6, width=12.1, size=30):
+    """Hàng card số liệu: emoji + số lớn + label. cards: list dict {"emoji","value","label"}."""
+    n = len(cards)
+    gap = 0.25
+    cw = (width - (n - 1) * gap) / n
+    ch = 1.35
+    for i, card in enumerate(cards):
+        x = left + i * (cw + gap)
+        box = slide.shapes.add_shape(1, Inches(x), Inches(top), Inches(cw), Inches(ch))
+        box.fill.solid()
+        box.fill.fore_color.rgb = CARD_BG
+        box.line.color.rgb = CARD_BORDER
+        box.line.width = Pt(1)
+        tf = box.text_frame
+        tf.word_wrap = True
+        tf.margin_left = tf.margin_right = Inches(0.05)
+        p = tf.paragraphs[0]
+        p.alignment = PP_ALIGN.CENTER
+        r = p.add_run()
+        r.text = card["emoji"] + "  " + card["value"]
+        _r(r, size, BLUE, bold=True)
+        p2 = tf.add_paragraph()
+        p2.alignment = PP_ALIGN.CENTER
+        r2 = p2.add_run()
+        r2.text = card["label"]
+        _r(r2, 12, SUB)
+
+
+def add_table_slide(prs, title, data, num=None, col_widths=None, note=None, note_top=6.6):
     slide = new_slide(prs)
     add_title_bar(slide, title, num)
     rows, cols = len(data), len(data[0])
@@ -195,7 +223,7 @@ def add_table_slide(prs, title, data, num=None, col_widths=None, note=None):
             r.text = str(val)
             _r(r, 13, WHITE if r_i == 0 else INK, bold=(r_i == 0))
     if note:
-        tb = slide.shapes.add_textbox(Inches(0.6), Inches(6.6), Inches(12.1), Inches(0.6))
+        tb = slide.shapes.add_textbox(Inches(0.6), Inches(note_top), Inches(12.1), Inches(0.6))
         _set_text(tb.text_frame, note, 14, SUB)
     return slide
 
@@ -376,7 +404,7 @@ def build():
     add_title_slide(prs)
 
     # 2. Giới thiệu bài toán
-    add_content_slide(prs, "Giới thiệu bài toán", [
+    s2 = add_content_slide(prs, "Giới thiệu bài toán", [
         ("Thị trường IT Việt Nam phát triển nhanh, nhu cầu tuyển dụng tập trung tại Hà Nội, TP.HCM, Đà Nẵng", 0),
         ("Tin tuyển dụng phân tán trên nhiều nền tảng, định dạng tự do — ứng viên khó so sánh lương & kỹ năng giữa các nguồn", 0),
         ("Bốn nền tảng lớn (Itviec, Glints, TopCV, Careerviet) đăng tin ở dạng khác nhau — dữ liệu phi cấu trúc", 0),
@@ -386,6 +414,12 @@ def build():
         ("Dự báo mức lương thị trường bằng 4 mô hình ML (Baseline, Linear, Decision Tree, Random Forest)", 1),
         ("Phân cụm thị trường (K-Means) & gợi ý việc làm phù hợp hồ sơ (Content-based)", 1),
     ], num=2)
+    _stat_cards(s2, [
+        {"emoji": "🗂️", "value": "1.193", "label": "tin tuyển dụng"},
+        {"emoji": "🌐", "value": "4", "label": "nguồn dữ liệu"},
+        {"emoji": "📋", "value": "44", "label": "thuộc tính"},
+        {"emoji": "🔒", "value": "56%", "label": "tin ẩn lương"},
+    ], top=6.55)
 
     # 3. Câu hỏi nghiên cứu
     add_table_slide(prs, "Câu hỏi nghiên cứu RQ1-RQ5", [
@@ -453,8 +487,15 @@ def build():
     ], num=8)
 
     # 9. Dữ liệu tổng quan
-    add_table_slide(prs, "Dữ liệu sau xử lý", CH2_STATS_TABLE, num=9, col_widths=[7, 5.1],
-                    note="1.193 tin tuyển dụng · 44 thuộc tính · 4 nguồn tuyển dụng chính tại Việt Nam")
+    s9 = add_table_slide(prs, "Dữ liệu sau xử lý", CH2_STATS_TABLE, num=9, col_widths=[7, 5.1],
+                         note="1.193 tin tuyển dụng · 44 thuộc tính · 4 nguồn tuyển dụng chính tại Việt Nam",
+                         note_top=6.9)
+    _stat_cards(s9, [
+        {"emoji": "🗂️", "value": "1.193", "label": "tin tuyển dụng"},
+        {"emoji": "🌐", "value": "4", "label": "nguồn dữ liệu"},
+        {"emoji": "🔒", "value": "56%", "label": "tin ẩn lương"},
+        {"emoji": "🧩", "value": "6.6%", "label": "độ phủ kỹ năng"},
+    ], top=5.35)
 
     # 9. EDA
     add_content_slide(prs, "Phân tích khám phá dữ liệu (EDA)", [
@@ -530,14 +571,20 @@ def build():
     ], num=19)
 
     # 20. Kết luận
-    add_content_slide(prs, "Kết luận", [
-        ("Pipeline DS end-to-end hoàn chỉnh, đáp ứng 100% tiêu chí học phần", 0),
-        ("Hồi quy: RMSE 8.97 (Baseline) → 4.17 (Linear, R² 0.783) → 0.60 (DT, R² 0.996)", 0),
-        ("SHAP xác nhận kinh nghiệm & nhóm kỹ năng là nhân tố chính — nhất quán 2 mô hình", 0),
-        ("K-Means k=10 (Silhouette 0.38): 5 phân khúc thị trường rõ rệt", 0),
-        ("Content-based: Top-3 phù hợp kèm kỹ năng còn thiếu", 0),
-        ("RQ1-RQ5 trả lời qua EDA (F1-F4), SHAP và hệ gợi ý", 0),
+    s20 = add_content_slide(prs, "Kết luận", [
+        ("Pipeline khoa học dữ liệu end-to-end hoàn chỉnh, đáp ứng đủ các tiêu chí của học phần", 0),
+        ("**Hồi quy:** RMSE giảm từ 8.97 (Baseline) xuống 4.17 (Linear, R² 0.783) rồi 0.60 (Decision Tree, R² 0.996)", 0),
+        ("**SHAP xác nhận** kinh nghiệm và nhóm kỹ năng là nhân tố chính quyết định lương, nhất quán giữa 2 mô hình", 0),
+        ("**K-Means** k = 10 (Silhouette 0.38) nhận diện 5 phân khúc thị trường rõ rệt", 0),
+        ("**Content-based** gợi ý Top-3 việc phù hợp kèm kỹ năng còn thiếu", 0),
+        ("Toàn bộ RQ1-RQ5 được trả lời qua EDA (F1-F4), SHAP và hệ gợi ý", 0),
     ], num=20)
+    _stat_cards(s20, [
+        {"emoji": "🎯", "value": "RMSE 0.60", "label": "Decision Tree"},
+        {"emoji": "📈", "value": "R² 0.996", "label": "Decision Tree"},
+        {"emoji": "💎", "value": "0.38", "label": "Silhouette k=10"},
+        {"emoji": "🎖️", "value": "Top-3", "label": "việc phù hợp"},
+    ], top=6.55, size=24)
 
     # 21. Hạn chế & Hướng phát triển
     add_content_slide(prs, "Hạn chế & Hướng phát triển", [
