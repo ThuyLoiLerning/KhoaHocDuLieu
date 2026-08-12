@@ -223,7 +223,7 @@ def add_table_slide(prs, title, data, num=None, col_widths=None, note=None, note
             r.text = str(val)
             _r(r, 13, WHITE if r_i == 0 else INK, bold=(r_i == 0))
     if note:
-        tb = slide.shapes.add_textbox(Inches(0.6), Inches(note_top), Inches(12.1), Inches(0.6))
+        tb = slide.shapes.add_textbox(Inches(0.6), Inches(note_top), Inches(12.1), Inches(0.9))
         _set_text(tb.text_frame, note, 14, SUB)
     return slide
 
@@ -405,14 +405,12 @@ def build():
 
     # 2. Giới thiệu bài toán
     s2 = add_content_slide(prs, "Giới thiệu bài toán", [
-        ("Thị trường IT Việt Nam phát triển nhanh, nhu cầu tuyển dụng tập trung tại Hà Nội, TP.HCM, Đà Nẵng", 0),
-        ("Tin tuyển dụng phân tán trên nhiều nền tảng, định dạng tự do — ứng viên khó so sánh lương & kỹ năng giữa các nguồn", 0),
-        ("Bốn nền tảng lớn (Itviec, Glints, TopCV, Careerviet) đăng tin ở dạng khác nhau — dữ liệu phi cấu trúc", 0),
-        ("Mục tiêu — xây pipeline trọn vẹn:", 0),
-        ("Thu thập tự động tin tuyển dụng IT từ 4 nguồn bằng Crawler v2", 1),
-        ("Làm sạch, chuẩn hóa lương – kỹ năng – kinh nghiệm về cùng định dạng", 1),
-        ("Dự báo mức lương thị trường bằng 4 mô hình ML (Baseline, Linear, Decision Tree, Random Forest)", 1),
-        ("Phân cụm thị trường (K-Means) & gợi ý việc làm phù hợp hồ sơ (Content-based)", 1),
+        ("Thị trường IT Việt Nam đang phát triển nhanh, nhu cầu tuyển dụng tập trung tại Hà Nội, TP.HCM và Đà Nẵng", 0),
+        ("Tin tuyển dụng phân tán trên nhiều nền tảng với định dạng tự do — ứng viên rất khó so sánh lương và kỹ năng giữa các nguồn", 0),
+        ("Bốn nền tảng lớn (Itviec, Glints, TopCV, Careerviet) đăng tin theo các dạng khác nhau nên dữ liệu thu về không đồng nhất", 0),
+        ("**Mục tiêu của đề tài** — xây dựng một pipeline xử lý dữ liệu trọn vẹn:", 0),
+        ("Thu thập tự động tin tuyển dụng IT từ 4 nguồn bằng Crawler v2; làm sạch và chuẩn hóa lương, kỹ năng, kinh nghiệm về cùng một định dạng", 1),
+        ("Dự báo mức lương thị trường bằng 4 mô hình ML và phân cụm K-Means, rồi gợi ý việc làm phù hợp với hồ sơ (Content-based)", 1),
     ], num=2)
     _stat_cards(s2, [
         {"emoji": "🗂️", "value": "1.193", "label": "tin tuyển dụng"},
@@ -445,26 +443,24 @@ def build():
 
     # 5. Crawler v2
     add_content_slide(prs, "Crawler v2 — Thu thập dữ liệu", [
-        ("Vòng lặp site × keyword (22 keyword), ngưỡng min_total_jobs, crawl_history JSON", 0),
-        ("HttpClient (httpx) bật xác thực SSL, tự theo redirect, timeout 20s — hạn chế lỗi kết nối bị chặn", 0),
-        ("Chống chặn: xoay vòng 3 User-Agent, rate-limit 1-3s, retry khi trả HTTP 429", 0),
-        ("Nhận diện trang chặn qua BLOCKED_MARKERS (captcha, cf-challenge)", 0),
-        ("4 kỹ thuật trích xuất:", 0),
-        ("JSON-LD Parsing — dữ liệu nhúng <script type=\"application/ld+json\">", 1),
-        ("__NEXT_DATA__ Extraction — JSON state của trang Next.js", 1),
-        ("HTML Parsing (BeautifulSoup) cho trang tĩnh", 1),
-        ("API JSON — gọi endpoint trả dữ liệu", 1),
-        ("Lưu raw CSV + JSON theo nguồn vào data/raw/, kèm log source_metadata", 0),
+        ("Crawler chạy vòng lặp qua từng nguồn và từ khóa (22 từ khóa), dừng khi đủ số tin tối thiểu, lịch sử ghi vào crawl_history.json", 0),
+        ("**HttpClient (httpx)** bật xác thực SSL, tự động theo redirect và timeout 20 giây để hạn chế lỗi kết nối bị chặn", 0),
+        ("**Chống chặn:** xoay vòng 3 User-Agent, giới hạn tốc độ 1-3 giây, thử lại khi máy chủ trả HTTP 429", 0),
+        ("Nhận diện trang bị chặn qua danh sách BLOCKED_MARKERS (captcha, cf-challenge)", 0),
+        ("**4 kỹ thuật trích xuất** dữ liệu từ trang:", 0),
+        ("JSON-LD Parsing — đọc dữ liệu nhúng trong thẻ script application/ld+json; __NEXT_DATA__ — lấy JSON state của trang Next.js", 1),
+        ("HTML Parsing bằng BeautifulSoup cho các trang tĩnh; API JSON — gọi trực tiếp endpoint trả dữ liệu", 1),
+        ("Lưu dữ liệu thô dạng CSV + JSON theo từng nguồn vào data/raw/, kèm log siêu dữ liệu", 0),
     ], num=5)
 
     # 6. Cleaning
     add_content_slide(prs, "Làm sạch & Chuẩn hóa dữ liệu", [
-        ("SalaryParser nhận diện 8 cấu trúc lương (6 regex, USD→VND ×25.000, năm→tháng)", 0),
-        ("56% tin ẩn lương (24+ từ khóa cạnh tranh, thỏa thuận) — \"tới X\" ≈ 70%, \"từ X\" ≈ 130% về điểm giữa", 1),
-        ("SkillNormalizer gộp 188 quy tắc đồng nghĩa → 45 kỹ năng chuẩn, 12 nhóm (fuzzy > 0.8, độ phủ 6.6%)", 0),
-        ("ExperienceNormalizer gán 5 bậc kinh nghiệm (entry→lead) bằng 6 regex TV/EN", 0),
-        ("Deduplicator loại 70 bản ghi trùng qua 4 pha: job_id, title+company, fuzzy title/desc", 0),
-        ("Kết quả: bộ dữ liệu 1.193 tin sạch, lương - kỹ năng - kinh nghiệm chuẩn hóa đồng nhất", 1),
+        ("**SalaryParser** nhận diện 8 cấu trúc lương bằng 6 regex, đổi USD sang VND (×25.000), quy lương năm về tháng", 0),
+        ("56% tin ẩn lương (24+ từ khóa như cạnh tranh, thỏa thuận) — khoảng \"tới X\" ≈ 70%, \"từ X\" ≈ 130% quy về điểm giữa", 1),
+        ("**SkillNormalizer** gộp 188 quy tắc đồng nghĩa thành 45 kỹ năng chuẩn thuộc 12 nhóm, khớp mờ ngưỡng > 0.8 (độ phủ 6.6%)", 0),
+        ("**ExperienceNormalizer** gán 5 bậc kinh nghiệm (entry đến lead) bằng 6 regex tiếng Việt và tiếng Anh", 0),
+        ("**Deduplicator** loại 70 bản ghi trùng qua 4 pha: job_id, title + company, khớp mờ title/desc", 0),
+        ("Kết quả: bộ dữ liệu 1.193 tin sạch, lương, kỹ năng, kinh nghiệm chuẩn hóa đồng nhất", 1),
     ], num=6)
 
     # 7. Cleaning — Chart
@@ -477,12 +473,12 @@ def build():
 
     # 8. Feature engineering
     add_content_slide(prs, "Feature Engineering", [
-        ("3 nhóm đặc trưng trong ColumnTransformer [3]:", 0),
-        ("Numeric (experience_years): điền giá trị thiếu bằng trung vị, rồi chuẩn hóa về tỷ lệ chuẩn", 1),
+        ("**3 nhóm đặc trưng** trong ColumnTransformer [3]:", 0),
+        ("Numeric (experience_years): điền giá trị thiếu bằng trung vị rồi chuẩn hóa về phân phối chuẩn", 1),
         ("Categorical (city, job_type, remote_option, education_level, industry, company_size): điền \"Unknown\" khi thiếu, OneHotEncoder bỏ qua giá trị mới lạ", 1),
-        ("Ordinal (experience_bin entry→lead): giữ thứ tự qua OrdinalEncoder, giá trị thiếu gán -1", 1),
-        ("Biến mục tiêu: salary_mid (triệu VND/tháng)", 0),
-        ("Loại cột thô (job_id, description, source_url...); ColumnTransformer(remainder=\"drop\")", 0),
+        ("Ordinal (experience_bin từ entry đến lead): giữ thứ tự qua OrdinalEncoder, giá trị thiếu gán -1", 1),
+        ("**Biến mục tiêu** là salary_mid (triệu VND/tháng)", 0),
+        ("Loại cột thô (job_id, description, source_url...); ColumnTransformer dùng remainder=\"drop\"", 0),
         ("Chia dữ liệu 80/20 và đánh giá 5-fold cross-validation để ước lượng độ ổn định của mô hình", 0),
     ], num=8)
 
@@ -499,12 +495,12 @@ def build():
 
     # 9. EDA
     add_content_slide(prs, "Phân tích khám phá dữ liệu (EDA)", [
-        ("F1 — Nhóm kỹ năng Data Science & Lập trình dẫn đầu (1.193 tin)", 0),
-        ("Top kỹ năng: JavaScript, React, Kafka, Python, SQL, Docker, Spring Boot, TensorFlow", 1),
-        ("F2 — Lương tăng theo bậc: Entry ~10M → Mid ~17M → Senior ~28M → Lead ~35M+", 0),
-        ("TP.HCM & Hà Nội lương trung bình cao hơn rõ rệt", 1),
-        ("F3 — Yêu cầu tiếng Anh: lương trung bình cao hơn ~30%", 0),
-        ("F4 — Vị trí cấp cao (Senior, Manager, Lead) ẩn lương >50%", 0),
+        ("**F1 — Nhóm kỹ năng** Data Science & Lập trình xuất hiện nhiều nhất trong 1.193 tin", 0),
+        ("Top kỹ năng được yêu cầu: JavaScript, React, Kafka, Python, SQL, Docker, Spring Boot, TensorFlow", 1),
+        ("**F2 — Lương tăng theo bậc kinh nghiệm:** Entry ~10M → Mid ~17M → Senior ~28M → Lead ~35M+", 0),
+        ("TP.HCM & Hà Nội có lương trung bình cao hơn rõ rệt so với các thành phố khác", 1),
+        ("**F3 — Yêu cầu tiếng Anh:** lương trung bình của tin yêu cầu tiếng Anh cao hơn ~30%", 0),
+        ("**F4 — Vị trí cấp cao** (Senior, Manager, Lead) ẩn lương với tỷ lệ >50%", 0),
     ], num=10)
 
     # 11. EDA — Chart
@@ -520,7 +516,7 @@ def build():
     # 12. Kết quả Supervised
     add_table_slide(prs, "Kết quả mô hình dự báo lương", ML_RESULTS_TABLE, num=12,
                     col_widths=[4.5, 2.5, 2.5, 2.6],
-                    note="Linear giảm RMSE 53.5%, Decision Tree giảm 93.3% so với Baseline trung bình · 12 sai số lớn nhất đều < 2.1M · Residual phân bố xung quanh 0 (std ≈ 0.6M) · RF học vẹt trên tập hiện tại (overfit)")
+                    note="Linear giảm RMSE 53.5%, Decision Tree giảm 93.3% so với Baseline trung bình. 12 sai số lớn nhất đều dưới 2.1 triệu VND. Residual phân bố quanh mức 0 (std ≈ 0.6M) nên dự đoán không thiên lệch. Random Forest học vẹt (overfit) trên tập dữ liệu hiện tại.")
 
     # 13. SHAP — Decision Tree
     add_shap_slide(prs, "SHAP — Giải thích mô hình Decision Tree", "shap_tree_summary.png",
@@ -541,7 +537,7 @@ def build():
     # 15. K-Means
     add_table_slide(prs, "Phân cụm thị trường (K-Means)", CH3_CLUSTER_TABLE, num=15,
                     col_widths=[1.5, 1.5, 1.8, 2.2, 5.1],
-                    note="Khảo sát k = 2..10, chọn k = 10 với Silhouette Score 0.38 — 5 phân khúc đặc trưng: Junior-Mid Hà Nội 15.1M · Mid-Senior TP.HCM 27.1M · Senior 41.9M · Mid đa dạng 20.8M · Remote 31.6M")
+                    note="Khảo sát số cụm k từ 2 đến 10, chọn k = 10 với Silhouette Score 0.38. Năm phân khúc đặc trưng: Junior-Mid Hà Nội 15.1M, Mid-Senior TP.HCM 27.1M, Senior 41.9M, Mid đa dạng 20.8M, Remote 31.6M.")
 
     # 16. K-Means — Chart
     add_chart_slide(prs, "K-Means — Chart phân cụm", [
@@ -562,7 +558,7 @@ def build():
     # 18. Recommendation
     add_table_slide(prs, "Hệ thống gợi ý việc làm (Content-based)", CH3_REC_TABLE, num=18,
                     col_widths=[3.2, 1.8, 4.1, 3.0],
-                    note="Mã hóa kỹ năng thành ma trận 1500 việc × 45 kỹ năng, lọc thành phố + kinh nghiệm ±0.5 năm trước khi tính cosine để giảm nhiễu · Demo hồ sơ [Python, SQL, Machine Learning] → Top-3: Data Scientist 1.0 · ML Engineer 0.67 · Data Engineer 0.67")
+                    note="Kỹ năng được mã hóa thành ma trận 1500 việc × 45 kỹ năng. Hệ thống lọc theo thành phố và kinh nghiệm ±0.5 năm trước khi tính cosine để giảm nhiễu. Demo hồ sơ [Python, SQL, Machine Learning] → Top-3: Data Scientist 1.0, ML Engineer 0.67, Data Engineer 0.67.")
 
     # 19. Recommendation — Chart
     add_chart_slide(prs, "Gợi ý — Chart similarity", [
@@ -588,14 +584,14 @@ def build():
 
     # 21. Hạn chế & Hướng phát triển
     add_content_slide(prs, "Hạn chế & Hướng phát triển", [
-        ("Hạn chế:", 0),
-        ("Kỹ năng chi tiết chỉ xuất hiện trong 6.6% tin — giới hạn của dữ liệu nguồn, ảnh hưởng độ chính xác đặc trưng kỹ năng", 1),
-        ("Dữ liệu thiên lệch địa lý: TP.HCM ~50% tin, Đà Nẵng chỉ ~4% — chưa đại diện đồng đều thị trường", 1),
-        ("DT/RF overfit trên tập hiện tại; dùng salary midpoint (điểm giữa khoảng) thay vì lương thực tế do 56% tin ẩn lương", 1),
-        ("Hướng phát triển:", 0),
+        ("**Hạn chế của dữ liệu và mô hình:**", 0),
+        ("Kỹ năng chi tiết chỉ xuất hiện trong 6.6% tin — giới hạn từ nguồn dữ liệu, ảnh hưởng đến độ chính xác của đặc trưng kỹ năng", 1),
+        ("Dữ liệu thiên lệch địa lý: TP.HCM chiếm ~50% tin trong khi Đà Nẵng chỉ ~4% — chưa đại diện đồng đều cho cả thị trường", 1),
+        ("Decision Tree và Random Forest overfit trên tập hiện tại; dùng salary midpoint (điểm giữa khoảng) thay vì lương thực tế do 56% tin ẩn lương", 1),
+        ("**Hướng phát triển trong tương lai:**", 0),
         ("Crawler truy cập sâu vào trang chi tiết từng tin, mở rộng số nguồn và cập nhật dữ liệu theo thời gian", 1),
-        ("Dùng NLP/BERT trích xuất đặc trưng ngữ nghĩa từ mô tả công việc — tận dụng nguồn thông tin thay kỹ năng bị ẩn", 1),
-        ("DBSCAN / Hierarchical Clustering; Hybrid Recommendation (collaborative + content-based)", 1),
+        ("Dùng NLP/BERT trích xuất đặc trưng ngữ nghĩa từ mô tả công việc — tận dụng nguồn thông tin thay cho kỹ năng bị ẩn", 1),
+        ("Thử DBSCAN / Hierarchical Clustering và Hybrid Recommendation (collaborative + content-based)", 1),
     ], num=21)
 
     # 19. Cảm ơn
