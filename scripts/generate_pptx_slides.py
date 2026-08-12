@@ -20,6 +20,15 @@ WHITE = RGBColor(0xFF, 0xFF, 0xFF)
 CYAN = RGBColor(0x00, 0xBC, 0xD4)
 GRAY = RGBColor(0xB0, 0xB0, 0xC0)
 TABLE_ALT = RGBColor(0x2A, 0x2A, 0x3E)
+FONT_NAME = "Calibri"
+
+
+def _r(run, size, color, bold=False):
+    run.font.name = FONT_NAME
+    run.font.size = Pt(size)
+    run.font.color.rgb = color
+    run.font.bold = bold
+    return run
 
 # --- Dữ liệu bảng (đồng bộ generate_docx_report.py) ---
 ML_RESULTS_TABLE = [
@@ -69,10 +78,7 @@ def _set_text(tf, text, size, color, bold=False, align=PP_ALIGN.LEFT):
     for p in tf.paragraphs:
         p.alignment = align
         for run in p.runs:
-            run.font.name = "Calibri"
-            run.font.size = Pt(size)
-            run.font.color.rgb = color
-            run.font.bold = bold
+            _r(run, size, color, bold)
     return tf
 
 
@@ -106,9 +112,7 @@ def add_bullets(slide, bullets, top=1.4, left=0.6, width=12.1, height=5.6, size=
             run.text = ""
         r = p.add_run()
         r.text = ("• " if level == 0 else "– ") + text
-        r.font.name = "Calibri"
-        r.font.size = Pt(size if level == 0 else size - 2)
-        r.font.color.rgb = WHITE if level == 0 else GRAY
+        _r(r, size if level == 0 else size - 2, WHITE if level == 0 else GRAY)
         p.space_after = Pt(8 if level == 0 else 4)
     return tb
 
@@ -134,10 +138,7 @@ def add_table_slide(prs, title, data, num=None, col_widths=None, note=None):
             p = tf.paragraphs[0]
             r = p.add_run()
             r.text = str(val)
-            r.font.name = "Calibri"
-            r.font.size = Pt(13)
-            r.font.color.rgb = WHITE
-            r.font.bold = (r_i == 0)
+            _r(r, 13, WHITE, bold=(r_i == 0))
     if note:
         tb = slide.shapes.add_textbox(Inches(0.6), Inches(6.6), Inches(12.1), Inches(0.6))
         _set_text(tb.text_frame, note, 14, GRAY)
@@ -150,12 +151,13 @@ def _img_size_px(path):
         return im.width, im.height
 
 
-def _add_pic(slide, path, x, y, w, h, caption):
+def _add_pic(slide, path, x, y, w, h, caption, cap_w=None):
     pic = slide.shapes.add_picture(str(path), Inches(x), Inches(y), Inches(w), Inches(h))
     pic.line.color.rgb = TABLE_ALT
     pic.line.width = Pt(1)
+    cw = cap_w if cap_w else w + 0.2
     tb = slide.shapes.add_textbox(Inches(x - 0.1), Inches(y + h + 0.05),
-                                  Inches(w + 0.2), Inches(0.35))
+                                  Inches(cw), Inches(0.35))
     _set_text(tb.text_frame, caption, 12, GRAY)
 
 
@@ -285,7 +287,7 @@ def add_shap_slide(prs, title, file, caption, bullets, num=None):
     w, h = 6.0, 6.0 / ar
     if h > 5.3:
         h, w = 5.3, 5.3 * ar
-    _add_pic(slide, path, 0.6, 1.35, w, h, caption)
+    _add_pic(slide, path, 0.6, 1.35, w, h, caption, cap_w=max(w, 6.0))
     add_bullets(slide, bullets, top=1.35, left=7.0, width=5.8, height=5.3, size=16)
     return slide
 
@@ -387,9 +389,9 @@ def build():
     # 7. Cleaning — Chart
     add_chart_slide(prs, "Làm sạch — Chart dữ liệu thực tế", [
         {"name": "missing_values", "file": "missing_values.png",
-         "caption": "Missing values — thiếu lương, kỹ năng, kinh nghiệm (nguồn: notebook 02, cell 8)"},
+         "caption": "Missing values (nguồn: notebook 02)"},
         {"name": "experience_years", "file": "experience_years.png",
-         "caption": "Phân bố kinh nghiệm yêu cầu (nguồn: notebook 02, cell 18)"},
+         "caption": "Phân bố kinh nghiệm yêu cầu (nguồn: notebook 02)"},
     ], num=7)
 
     # 8. Feature engineering
@@ -420,11 +422,11 @@ def build():
     # 11. EDA — Chart
     add_chart_slide(prs, "EDA — Chart chi tiết", [
         {"name": "skill_group_dist", "file": "skill_group_dist.png", "wide": True,
-         "caption": "Phân bố nhóm kỹ năng theo số lần xuất hiện (nguồn: notebook 03, cell 11)"},
+         "caption": "Phân bố nhóm kỹ năng (nguồn: notebook 03)"},
         {"name": "top20_skills", "file": "top20_skills.png",
-         "caption": "Top 20 kỹ năng được yêu cầu nhiều nhất (nguồn: notebook 03, cell 9)"},
+         "caption": "Top 20 kỹ năng được yêu cầu (nguồn: notebook 03)"},
         {"name": "salary_english", "file": "salary_english.png",
-         "caption": "Lương trung bình theo yêu cầu tiếng Anh (nguồn: notebook 03, cell 23)"},
+         "caption": "Lương trung bình theo tiếng Anh (nguồn: notebook 03)"},
     ], num=11)
 
     # 12. Kết quả Supervised
@@ -434,7 +436,7 @@ def build():
 
     # 13. SHAP — Decision Tree
     add_shap_slide(prs, "SHAP — Giải thích mô hình Decision Tree", "shap_tree_summary.png",
-                   "SHAP summary plot — nguồn: scripts/generate_shap_plots.py (TreeExplainer)", [
+                   "SHAP summary plot (nguồn: scripts/generate_shap_plots.py)", [
         ("TreeExplainer tính đóng góp (SHAP value) của 21 đặc trưng cho từng tin — minh họa trên 105 tin kiểm thử (20%)", 0),
         ("experience_years & nhóm kỹ năng đóng góp lớn nhất — bậc kinh nghiệm là yếu tố quyết định lương", 0),
         ("Đỏ: đẩy lương lên · xanh: kéo xuống — điểm màu trải rộng phản ánh tác động phi tuyến của Decision Tree", 0),
@@ -444,9 +446,9 @@ def build():
     # 14. Kết quả ML — Chart
     add_chart_slide(prs, "Kết quả ML — Chart", [
         {"name": "residuals", "file": "residuals.png",
-         "caption": "Residuals — dự đoán vs thực tế (nguồn: notebook 04, cell 18)"},
+         "caption": "Residuals — dự đoán vs thực tế (nguồn: notebook 04)"},
         {"name": "model_compare", "file": "model_compare.png",
-         "caption": "So sánh RMSE / MAE / R² giữa 4 mô hình (nguồn: notebook 04, cell 20)"},
+         "caption": "So sánh RMSE / MAE / R² của 4 mô hình (nguồn: notebook 04)"},
     ], num=14)
 
     # 15. K-Means
@@ -457,14 +459,14 @@ def build():
     # 16. K-Means — Chart
     add_chart_slide(prs, "K-Means — Chart phân cụm", [
         {"name": "silhouette_scores", "file": "silhouette_scores.png",
-         "caption": "Silhouette Score với k = 2..10 (nguồn: notebook 04, cell 24)"},
+         "caption": "Silhouette Score k = 2..10 (nguồn: notebook 04)"},
         {"name": "pca_2d_clusters", "file": "pca_2d_clusters.png",
-         "caption": "PCA 2D — 10 cụm trên không gian 2 chiều (nguồn: notebook 04, cell 27)"},
+         "caption": "PCA 2D — 10 cụm trên không gian 2 chiều (nguồn: notebook 04)"},
     ], num=16)
 
     # 17. SHAP — Linear
     add_shap_slide(prs, "SHAP — Giải thích mô hình Linear Regression", "shap_linear_summary.png",
-                   "SHAP summary plot — nguồn: scripts/generate_shap_plots.py (LinearExplainer)", [
+                   "SHAP summary plot (nguồn: scripts/generate_shap_plots.py)", [
         ("LinearExplainer: SHAP = hệ số × giá trị feature — quan hệ 1:1 trên cùng 105 tin kiểm thử, dễ đọc", 0),
         ("Top features khớp với Decision Tree (experience_years, nhóm kỹ năng) — kết quả ổn định qua 2 mô hình", 0),
         ("Độ lớn SHAP là đóng góp tuyệt đối vào lương (triệu VND) — so sánh trực tiếp độ quan trọng", 0),
@@ -479,7 +481,7 @@ def build():
     # 19. Recommendation — Chart
     add_chart_slide(prs, "Gợi ý — Chart similarity", [
         {"name": "similarity_dist", "file": "similarity_dist.png",
-         "caption": "Phân bố similarity — độ tương đồng hồ sơ với các việc làm (nguồn: notebook 04, cell 33)"},
+         "caption": "Phân bố similarity của hồ sơ với các việc (nguồn: notebook 04)"},
     ], num=19)
 
     # 20. Kết luận
