@@ -376,14 +376,12 @@ def build():
 
     # 6. Cleaning
     add_content_slide(prs, "Làm sạch & Chuẩn hóa dữ liệu", [
-        ("SalaryParser nhận diện 8 cấu trúc lương bằng 6 regex, đổi USD→VND (×25.000), quy lương năm về tháng", 0),
-        ("Khoảng lương chuẩn hóa về điểm giữa: \"tới X\" ≈ 70%, \"từ X\" ≈ 130% — phản ánh thực tế thị trường", 1),
-        ("56% tin ẩn lương (24+ từ khóa như cạnh tranh, thỏa thuận) → cần xử lý trước khi dùng cho ML", 1),
-        ("SkillNormalizer gộp 188 quy tắc đồng nghĩa về 45 kỹ năng chuẩn thuộc 12 nhóm", 0),
-        ("Khớp kỹ năng mờ bằng SequenceMatcher (ngưỡng > 0.8) — chỉ 6.6% tin có phần kỹ năng chi tiết", 1),
-        ("ExperienceNormalizer dùng 6 regex TV/EN gán 5 bậc kinh nghiệm (entry → lead), fallback giá trị thô", 0),
-        ("Deduplicator: 4 pha (job_id, title+company, fuzzy title ≥0.8, fuzzy desc ≥0.7)", 0),
-        ("Kết quả: loại 70 bản ghi trùng lặp", 1),
+        ("SalaryParser nhận diện 8 cấu trúc lương (6 regex, USD→VND ×25.000, năm→tháng)", 0),
+        ("56% tin ẩn lương (24+ từ khóa cạnh tranh, thỏa thuận) — \"tới X\" ≈ 70%, \"từ X\" ≈ 130% về điểm giữa", 1),
+        ("SkillNormalizer gộp 188 quy tắc đồng nghĩa → 45 kỹ năng chuẩn, 12 nhóm (fuzzy > 0.8, độ phủ 6.6%)", 0),
+        ("ExperienceNormalizer gán 5 bậc kinh nghiệm (entry→lead) bằng 6 regex TV/EN", 0),
+        ("Deduplicator loại 70 bản ghi trùng qua 4 pha: job_id, title+company, fuzzy title/desc", 0),
+        ("Kết quả: bộ dữ liệu 1.193 tin sạch, lương - kỹ năng - kinh nghiệm chuẩn hóa đồng nhất", 1),
     ], num=6)
 
     # 7. Cleaning — Chart
