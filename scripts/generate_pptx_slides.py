@@ -404,12 +404,12 @@ def build():
 
     # 9. EDA
     add_content_slide(prs, "Phân tích khám phá dữ liệu (EDA)", [
-        ("F1 — Nhóm kỹ năng Data Science & Lập trình xuất hiện nhiều nhất trong 1.193 tin — phần lớn vị trí tuyển dụng tập trung vào 2 mảng này", 0),
-        ("Top kỹ năng được yêu cầu: JavaScript, React, Kafka, Python, SQL, Docker, Spring Boot, TensorFlow", 1),
-        ("F2 — Lương tăng dần theo bậc kinh nghiệm: Entry ~10M → Mid ~17M → Senior ~28M → Lead ~35M+, xác nhận kinh nghiệm là nhân tố chính", 0),
-        ("TP.HCM & Hà Nội có lương trung bình cao hơn rõ rệt so với các khu vực khác", 1),
-        ("F3 — Tin yêu cầu tiếng Anh trả lương trung bình cao hơn ~30% — ngoại ngữ làm tăng giá trị vị trí", 0),
-        ("F4 — Vị trí cấp cao (Senior, Manager, Lead) thường ẩn lương (>50%) — thị trường không công khai mức lương cao", 0),
+        ("F1 — Nhóm kỹ năng Data Science & Lập trình dẫn đầu (1.193 tin)", 0),
+        ("Top kỹ năng: JavaScript, React, Kafka, Python, SQL, Docker, Spring Boot, TensorFlow", 1),
+        ("F2 — Lương tăng theo bậc: Entry ~10M → Mid ~17M → Senior ~28M → Lead ~35M+", 0),
+        ("TP.HCM & Hà Nội lương trung bình cao hơn rõ rệt", 1),
+        ("F3 — Yêu cầu tiếng Anh: lương trung bình cao hơn ~30%", 0),
+        ("F4 — Vị trí cấp cao (Senior, Manager, Lead) ẩn lương >50%", 0),
     ], num=10)
 
     # 11. EDA — Chart
@@ -477,12 +477,12 @@ def build():
 
     # 20. Kết luận
     add_content_slide(prs, "Kết luận", [
-        ("Xây dựng hoàn chỉnh pipeline Khoa học Dữ liệu end-to-end, đáp ứng 100% tiêu chí học phần", 0),
-        ("Hồi quy: RMSE hạ từ 8.97 (Baseline) xuống 4.17 (Linear, R² 0.783) rồi 0.60 (DT, R² 0.996) — mô hình dự báo lương chính xác", 0),
-        ("SHAP xác nhận kinh nghiệm & nhóm kỹ năng là nhân tố chính quyết định lương — kết quả nhất quán giữa Decision Tree và Linear", 0),
-        ("K-Means (k=10, Silhouette 0.38) nhận diện 5 phân khúc thị trường với mức lương & kỹ năng riêng biệt", 0),
-        ("Content-based trả Top-3 phù hợp (Data Scientist, ML Engineer, Data Engineer) kèm kỹ năng còn thiếu", 0),
-        ("RQ1-RQ5 đều được trả lời qua EDA (F1-F4), SHAP và hệ gợi ý", 0),
+        ("Pipeline DS end-to-end hoàn chỉnh, đáp ứng 100% tiêu chí học phần", 0),
+        ("Hồi quy: RMSE 8.97 (Baseline) → 4.17 (Linear, R² 0.783) → 0.60 (DT, R² 0.996)", 0),
+        ("SHAP xác nhận kinh nghiệm & nhóm kỹ năng là nhân tố chính — nhất quán 2 mô hình", 0),
+        ("K-Means k=10 (Silhouette 0.38): 5 phân khúc thị trường rõ rệt", 0),
+        ("Content-based: Top-3 phù hợp kèm kỹ năng còn thiếu", 0),
+        ("RQ1-RQ5 trả lời qua EDA (F1-F4), SHAP và hệ gợi ý", 0),
     ], num=20)
 
     # 21. Hạn chế & Hướng phát triển
