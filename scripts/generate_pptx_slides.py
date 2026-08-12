@@ -279,11 +279,11 @@ def add_shap_slide(prs, title, file, caption, bullets, num=None):
     path = CHARTS_DIR / file
     w_px, h_px = _img_size_px(path)
     ar = w_px / h_px
-    w, h = 6.0, 6.0 / ar
+    w, h = 6.6, 6.6 / ar
     if h > 5.3:
         h, w = 5.3, 5.3 * ar
     _add_pic(slide, path, 0.6, 1.35, w, h, caption, cap_w=max(w, 6.0))
-    add_bullets(slide, bullets, top=1.35, left=7.0, width=5.8, height=5.3, size=16)
+    add_bullets(slide, bullets, top=1.35, left=7.45, width=5.4, height=5.3, size=15)
     return slide
 
 
@@ -430,10 +430,9 @@ def build():
     # 13. SHAP — Decision Tree
     add_shap_slide(prs, "SHAP — Giải thích mô hình Decision Tree", "shap_tree_summary.png",
                    "SHAP summary plot (nguồn: scripts/generate_shap_plots.py)", [
-        ("TreeExplainer tính đóng góp (SHAP value) của 21 đặc trưng cho từng tin — minh họa trên 105 tin kiểm thử (20%)", 0),
-        ("experience_years & nhóm kỹ năng đóng góp lớn nhất — bậc kinh nghiệm là yếu tố quyết định lương", 0),
-        ("Đỏ: đẩy lương lên · xanh: kéo xuống — điểm màu trải rộng phản ánh tác động phi tuyến của Decision Tree", 0),
-        ("So với dự đoán baseline (mean lương), SHAP cộng dồn giải thích lương tin cao/thấp hơn bao nhiêu", 0),
+        ("TreeExplainer tính đóng góp của 21 đặc trưng cho từng tin (105 tin kiểm thử)", 0),
+        ("experience_years & nhóm kỹ năng đóng góp lớn nhất — kinh nghiệm quyết định lương", 0),
+        ("Đỏ: đẩy lương lên · xanh: kéo xuống — độ trải phản ánh tác động phi tuyến của DT", 0),
     ], num=13)
 
     # 14. Kết quả ML — Chart
@@ -460,10 +459,9 @@ def build():
     # 17. SHAP — Linear
     add_shap_slide(prs, "SHAP — Giải thích mô hình Linear Regression", "shap_linear_summary.png",
                    "SHAP summary plot (nguồn: scripts/generate_shap_plots.py)", [
-        ("LinearExplainer: SHAP = hệ số × giá trị feature — quan hệ 1:1 trên cùng 105 tin kiểm thử, dễ đọc", 0),
-        ("Top features khớp với Decision Tree (experience_years, nhóm kỹ năng) — kết quả ổn định qua 2 mô hình", 0),
-        ("Độ lớn SHAP là đóng góp tuyệt đối vào lương (triệu VND) — so sánh trực tiếp độ quan trọng", 0),
-        ("Bổ sung cho DT: giải thích tuyến tính thay hộp đen — cùng cấu trúc dữ liệu, cùng thứ tự yếu tố chính", 0),
+        ("LinearExplainer: SHAP = hệ số × giá trị feature — quan hệ 1:1, dễ đọc (105 tin kiểm thử)", 0),
+        ("Top features khớp với Decision Tree — kết quả ổn định qua 2 mô hình", 0),
+        ("Độ lớn SHAP = đóng góp tuyệt đối vào lương (triệu VND), so sánh trực tiếp", 0),
     ], num=17)
 
     # 18. Recommendation
