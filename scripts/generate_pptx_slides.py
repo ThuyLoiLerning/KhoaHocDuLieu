@@ -470,9 +470,9 @@ def build():
     # 7. Cleaning — Chart
     add_chart_slide(prs, "Làm sạch — Chart dữ liệu thực tế", [
         {"name": "missing_values", "file": "missing_values.png",
-         "caption": "Missing values (nguồn: notebook 02)"},
+         "caption": "Tỷ lệ giá trị thiếu của các cột dữ liệu"},
         {"name": "experience_years", "file": "experience_years.png",
-         "caption": "Phân bố kinh nghiệm yêu cầu (nguồn: notebook 02)"},
+         "caption": "Phân bố số năm kinh nghiệm yêu cầu trong tin tuyển dụng"},
     ], num=7)
 
     # 8. Feature engineering
@@ -510,11 +510,11 @@ def build():
     # 11. EDA — Chart
     add_chart_slide(prs, "EDA — Chart chi tiết", [
         {"name": "skill_group_dist", "file": "skill_group_dist.png", "wide": True,
-         "caption": "Phân bố nhóm kỹ năng (nguồn: notebook 03)"},
+         "caption": "Tỷ lệ tin tuyển dụng theo từng nhóm kỹ năng"},
         {"name": "top20_skills", "file": "top20_skills.png",
-         "caption": "Top 20 kỹ năng được yêu cầu (nguồn: notebook 03)"},
+         "caption": "20 kỹ năng được nhà tuyển dụng yêu cầu nhiều nhất"},
         {"name": "salary_english", "file": "salary_english.png",
-         "caption": "Lương trung bình theo tiếng Anh (nguồn: notebook 03)"},
+         "caption": "Lương trung bình ở tin có và không yêu cầu tiếng Anh"},
     ], num=11)
 
     # 12. Kết quả Supervised
@@ -525,17 +525,17 @@ def build():
     # 13. SHAP — Decision Tree
     add_shap_slide(prs, "SHAP — Giải thích mô hình Decision Tree", "shap_tree_summary.png",
                    "SHAP summary plot (nguồn: scripts/generate_shap_plots.py)", [
-        ("TreeExplainer tính đóng góp của 21 đặc trưng cho từng tin (105 tin kiểm thử)", 0),
-        ("experience_years & nhóm kỹ năng đóng góp lớn nhất — kinh nghiệm quyết định lương", 0),
-        ("Đỏ: đẩy lương lên · xanh: kéo xuống — độ trải phản ánh tác động phi tuyến của DT", 0),
+        ("**TreeExplainer** tính đóng góp của 21 đặc trưng cho từng tin trong 105 tin kiểm thử (20% tập dữ liệu)", 0),
+        ("**experience_years** và nhóm kỹ năng đóng góp lớn nhất — kinh nghiệm là yếu tố quyết định mức lương", 0),
+        ("Đỏ đẩy lương lên, xanh kéo lương xuống — độ trải rộng của điểm màu phản ánh tác động phi tuyến của Decision Tree", 0),
     ], num=13)
 
     # 14. Kết quả ML — Chart
     add_chart_slide(prs, "Kết quả ML — Chart", [
         {"name": "residuals", "file": "residuals.png",
-         "caption": "Residuals — dự đoán vs thực tế (nguồn: notebook 04)"},
+         "caption": "Sai số dự đoán (residual) phân bố quanh mức 0"},
         {"name": "model_compare", "file": "model_compare.png",
-         "caption": "So sánh RMSE / MAE / R² của 4 mô hình (nguồn: notebook 04)"},
+         "caption": "So sánh độ chính xác RMSE, MAE, R² giữa 4 mô hình"},
     ], num=14)
 
     # 15. K-Means
@@ -546,17 +546,17 @@ def build():
     # 16. K-Means — Chart
     add_chart_slide(prs, "K-Means — Chart phân cụm", [
         {"name": "silhouette_scores", "file": "silhouette_scores.png",
-         "caption": "Silhouette Score k = 2..10 (nguồn: notebook 04)"},
+         "caption": "Silhouette Score khi khảo sát số cụm k từ 2 đến 10"},
         {"name": "pca_2d_clusters", "file": "pca_2d_clusters.png",
-         "caption": "PCA 2D — 10 cụm trên không gian 2 chiều (nguồn: notebook 04)"},
+         "caption": "10 cụm thị trường nhìn trên không gian 2 chiều sau PCA"},
     ], num=16)
 
     # 17. SHAP — Linear
     add_shap_slide(prs, "SHAP — Giải thích mô hình Linear Regression", "shap_linear_summary.png",
                    "SHAP summary plot (nguồn: scripts/generate_shap_plots.py)", [
-        ("LinearExplainer: SHAP = hệ số × giá trị feature — quan hệ 1:1, dễ đọc (105 tin kiểm thử)", 0),
-        ("Top features khớp với Decision Tree — kết quả ổn định qua 2 mô hình", 0),
-        ("Độ lớn SHAP = đóng góp tuyệt đối vào lương (triệu VND), so sánh trực tiếp", 0),
+        ("**LinearExplainer** tính SHAP bằng hệ số nhân giá trị đặc trưng — quan hệ 1:1, dễ đọc trên 105 tin kiểm thử", 0),
+        ("Các đặc trưng quan trọng nhất **khớp với Decision Tree** — kết quả ổn định giữa 2 mô hình", 0),
+        ("Độ lớn SHAP là đóng góp tuyệt đối vào lương (triệu VND) — so sánh trực tiếp được độ quan trọng giữa các đặc trưng", 0),
     ], num=17)
 
     # 18. Recommendation
@@ -567,7 +567,7 @@ def build():
     # 19. Recommendation — Chart
     add_chart_slide(prs, "Gợi ý — Chart similarity", [
         {"name": "similarity_dist", "file": "similarity_dist.png",
-         "caption": "Phân bố similarity của hồ sơ với các việc (nguồn: notebook 04)"},
+         "caption": "Điểm tương đồng (similarity) giữa hồ sơ demo và các việc trong kho"},
     ], num=19)
 
     # 20. Kết luận
