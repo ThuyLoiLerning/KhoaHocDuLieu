@@ -56,7 +56,7 @@ giữ nguyên kiến trúc 1-file, không tách module, không thêm thư viện
       • Đối chiếu từng kỹ thuật với đặc thù dữ liệu tuyển dụng VN
       • Lý do chọn 3 nhóm phương pháp (supervised / unsupervised / content-based)
       • Độ phù hợp & hạn chế đã biết (6.6% kỹ năng, overfitting cây)
-      • Bảng/bullet tổng hợp: kỹ thuật → dữ liệu → kết quả
+      • Bullet tổng hợp: kỹ thuật → dữ liệu → kết quả (không tạo bảng mới)
 ```
 
 **Mẫu trích dẫn:** `[1]`, `[2]`, ... đánh dấu cuối mỗi đoạn khái niệm/công thức trong 1.2 & 1.3.

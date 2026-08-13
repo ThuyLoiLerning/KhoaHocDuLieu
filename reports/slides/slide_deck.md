@@ -55,8 +55,8 @@ Nhóm 2 thành viên — 8 buổi
 - careerbuilder.vn — dự phòng
 
 **Kết quả thực tế:**
-- 100% site block (403, 404, SSL, JS rendering)
-- Sử dụng fallback data generator (đáp ứng A4)
+- Thu thập thành công dữ liệu từ Careerviet, Itviec, Glints, TopCV.
+- Xây dựng pipeline tự động lưu raw data $\rightarrow$ clean $\rightarrow$ combined.csv.
 
 **Pipeline:**
 ```
@@ -69,13 +69,13 @@ run_all_scrapers() → fallback → save raw → inject dirty data → clean →
 
 | Chỉ tiêu | Giá trị |
 |----------|---------|
-| Tổng số jobs | 1.329 |
+| Tổng số jobs | 1.193 |
 | Tổng kỹ năng | 45 unique |
-| Tổng công ty | 1.533 |
-| Thành phố | HCMC (50%), Hanoi (46%), Da Nang (4%) |
-| Thuộc tính | 34 columns |
-| Jobs có kỹ năng | 100% |
-| Jobs có lương | 75% (25% hidden) |
+| Tổng công ty | 1.193 |
+| Thành phố | HCMC, Hanoi, Da Nang + tỉnh lẻ |
+| Thuộc tính | 44 columns |
+| Jobs có kỹ năng | 6.6% |
+| Jobs có lương | 44% (56% hidden) |
 | Dạng file gốc | CSV + JSON |
 | Dạng file sạch | Parquet + CSV |
 

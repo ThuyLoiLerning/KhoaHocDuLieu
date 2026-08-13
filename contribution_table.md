@@ -5,7 +5,7 @@
 | Buổi | Nội dung | Member 1 | Member 2 |
 |------|----------|----------|----------|
 | 1 | Thiết lập repo & Problem Definition | Tạo structure, requirements, README, .gitignore | Viết 01_problem_and_data.ipynb |
-| 2 | OOP Classes | `src/domain/job_posting.py`, `company.py` | `src/domain/skill.py`, `data/data_manager.py` (skeleton) |
+| 2 | OOP Classes | `src/domain/job_posting.py`, `company.py`, `job_record.py` | `src/domain/skill.py`, `data/data_manager.py` (skeleton) |
 | 3 | Data Collection | `src/crawl/fetchers.py` (itviec + vietnamworks + glints), `salary_parser.py` | `src/crawl/fetchers.py` (vietnamworks HTML fallback), verify quality |
 | 4 | Cleaning Pipeline | `data_manager.py` merge/save, cleanup review | `skill_normalizer.py`, `experience_normalizer.py`, `deduplicator.py` |
 | 5 | Merge + Pivot | Run merge → combined.parquet, 5 pivot tables | `chart_utils.py` |
@@ -27,7 +27,7 @@
 
 | Hạng mục | Member 1 | Member 2 |
 |----------|----------|----------|
-| Số file Python trong `src/` | job_posting.py, company.py, data_manager.py, fetchers.py (crawl), salary_parser.py, chart_utils.py, feature_pipeline.py, baseline.py, clustering.py | skill.py, skill_normalizer.py, experience_normalizer.py, deduplicator.py, supervised.py, recommendation.py |
+| Số file Python trong `src/` | job_posting.py, company.py, job_record.py, data_manager.py, fetchers.py (crawl), salary_parser.py, chart_utils.py, feature_pipeline.py, baseline.py, clustering.py | skill.py, skill_normalizer.py, experience_normalizer.py, deduplicator.py, supervised.py, recommendation.py |
 | Số notebook viết chính | 01_problem_and_data (đồng tác giả) | 02_collection_and_cleaning, 03_eda, 04_machine_learning |
 | Số test file | test_salary_parser.py, test_deduplicator.py | test_skill_normalizer.py, test_recommendation.py |
 | Số biểu đồ EDA | 4 | 4+ |

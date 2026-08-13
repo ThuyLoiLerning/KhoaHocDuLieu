@@ -403,16 +403,25 @@ def build():
     # 1. Bìa
     add_title_slide(prs)
 
-    # 2. Giới thiệu bài toán
-    s2 = add_content_slide(prs, "Giới thiệu bài toán", [
+    # 2. Mục lục
+    add_content_slide(prs, "Nội dung trình bày", [
+        ("**Phần 1 – Giới thiệu & Mục tiêu** (Slide 3-4)", 0),
+        ("**Phần 2 – Phương pháp Xử lý dữ liệu** (Slide 5-9)", 0),
+        ("**Phần 3 – Phân tích khám phá (EDA)** (Slide 10-12)", 0),
+        ("**Phần 4 – Kết quả mô hình ML** (Slide 13-20)", 0),
+        ("**Phần 5 – Kết luận & Hướng phát triển** (Slide 21-23)", 0),
+    ], num=2)
+
+    # 3. Giới thiệu bài toán
+    s3 = add_content_slide(prs, "Giới thiệu bài toán", [
         ("Thị trường IT Việt Nam đang phát triển nhanh, nhu cầu tuyển dụng tập trung tại Hà Nội, TP.HCM và Đà Nẵng", 0),
         ("Tin tuyển dụng phân tán trên nhiều nền tảng với định dạng tự do — ứng viên rất khó so sánh lương và kỹ năng giữa các nguồn", 0),
         ("Bốn nền tảng lớn (Itviec, Glints, TopCV, Careerviet) đăng tin theo các dạng khác nhau nên dữ liệu thu về không đồng nhất", 0),
         ("**Mục tiêu của đề tài** — xây dựng một pipeline xử lý dữ liệu trọn vẹn:", 0),
         ("Thu thập tự động tin tuyển dụng IT từ 4 nguồn bằng Crawler v2; làm sạch và chuẩn hóa lương, kỹ năng, kinh nghiệm về cùng một định dạng", 1),
         ("Dự báo mức lương thị trường bằng 4 mô hình ML và phân cụm K-Means, rồi gợi ý việc làm phù hợp với hồ sơ (Content-based)", 1),
-    ], num=2)
-    _stat_cards(s2, [
+    ], num=3)
+    _stat_cards(s3, [
         {"emoji": "🗂️", "value": "1.193", "label": "tin tuyển dụng"},
         {"emoji": "🌐", "value": "4", "label": "nguồn dữ liệu"},
         {"emoji": "📋", "value": "44", "label": "thuộc tính"},
@@ -427,9 +436,9 @@ def build():
         ["RQ3: Có thể dự báo mức lương không, sai số bao nhiêu?", "ML — RMSE, MAE, R²"],
         ["RQ4: Thị trường phân khúc thành những nhóm nào?", "K-Means — silhouette"],
         ["RQ5: Việc nào phù hợp với hồ sơ kỹ năng?", "Content-based — cosine"],
-    ], num=3, col_widths=[8, 4.1])
+    ], num=4, col_widths=[8, 4.1])
 
-    # 4. Kiến trúc hệ thống
+    # 5. Kiến trúc hệ thống
     add_flow_slide(prs, "Kiến trúc hệ thống — Pipeline end-to-end", [
         {"title": "1. Thu thập dữ liệu",
          "lines": ["Crawler v2 — 4 nguồn: Itviec, Glints, TopCV, Careerviet", "22 keyword · 1.193 tin"]},
@@ -439,9 +448,9 @@ def build():
          "lines": ["ColumnTransformer", "numeric / categorical / ordinal", "target: salary_mid"]},
         {"title": "4. ML & Gợi ý",
          "lines": ["Hồi quy: Linear, DT, RF", "K-Means k=10 · Cosine similarity", "Top-3 việc phù hợp"]},
-    ], num=4)
+    ], num=5)
 
-    # 5. Crawler v2
+    # 6. Crawler v2
     add_content_slide(prs, "Crawler v2 — Thu thập dữ liệu", [
         ("Crawler chạy vòng lặp qua từng nguồn và từ khóa (22 từ khóa), dừng khi đủ số tin tối thiểu, lịch sử ghi vào crawl_history.json", 0),
         ("**HttpClient (httpx)** bật xác thực SSL, tự động theo redirect và timeout 20 giây để hạn chế lỗi kết nối bị chặn", 0),
@@ -451,27 +460,68 @@ def build():
         ("JSON-LD Parsing — đọc dữ liệu nhúng trong thẻ script application/ld+json; __NEXT_DATA__ — lấy JSON state của trang Next.js", 1),
         ("HTML Parsing bằng BeautifulSoup cho các trang tĩnh; API JSON — gọi trực tiếp endpoint trả dữ liệu", 1),
         ("Lưu dữ liệu thô dạng CSV + JSON theo từng nguồn vào data/raw/, kèm log siêu dữ liệu", 0),
-    ], num=5)
-
-    # 6. Cleaning
-    add_content_slide(prs, "Làm sạch & Chuẩn hóa dữ liệu", [
-        ("**SalaryParser** nhận diện 8 cấu trúc lương bằng 6 regex, đổi USD sang VND (×25.000), quy lương năm về tháng", 0),
-        ("56% tin ẩn lương (24+ từ khóa như cạnh tranh, thỏa thuận) — khoảng \"tới X\" ≈ 70%, \"từ X\" ≈ 130% quy về điểm giữa", 1),
-        ("**SkillNormalizer** gộp 188 quy tắc đồng nghĩa thành 45 kỹ năng chuẩn thuộc 12 nhóm, khớp mờ ngưỡng > 0.8 (độ phủ 6.6%)", 0),
-        ("**ExperienceNormalizer** gán 5 bậc kinh nghiệm (entry đến lead) bằng 6 regex tiếng Việt và tiếng Anh", 0),
-        ("**Deduplicator** loại 70 bản ghi trùng qua 4 pha: job_id, title + company, khớp mờ title/desc", 0),
-        ("Kết quả: bộ dữ liệu 1.193 tin sạch, lương, kỹ năng, kinh nghiệm chuẩn hóa đồng nhất", 1),
     ], num=6)
 
-    # 7. Cleaning — Chart
-    add_chart_slide(prs, "Làm sạch — Chart dữ liệu thực tế", [
-        {"name": "missing_values", "file": "missing_values.png",
-         "caption": "Tỷ lệ giá trị thiếu của các cột dữ liệu"},
-        {"name": "experience_years", "file": "experience_years.png",
-         "caption": "Phân bố số năm kinh nghiệm yêu cầu trong tin tuyển dụng"},
-    ], num=7)
+    # 7. Cleaning
+    s7 = new_slide(prs)
+    add_title_bar(s7, "Làm sạch & Chuẩn hóa dữ liệu", num=7)
 
-    # 8. Feature engineering
+    # Cột trái: Vấn đề dữ liệu gốc
+    left_box = s7.shapes.add_textbox(Inches(0.6), Inches(1.35), Inches(5.9), Inches(5.3))
+    tf_l = left_box.text_frame
+    tf_l.word_wrap = True
+    p1 = tf_l.paragraphs[0]
+    p1.text = "Vấn đề dữ liệu gốc"
+    _r(p1.runs[0], 18, BLUE, bold=True)
+
+    problems = [
+        ("**Lương:** 56% tin ẩn mức lương; còn lại viết dưới 8 dạng khác nhau (tới X, từ X, khoảng X-Y, v.v.)", 0),
+        ("**Kỹ năng:** Một kỹ năng có nhiều tên gọi (ví dụ: 'reactjs', 'react.js', 'react') gây nhiễu", 0),
+        ("**Kinh nghiệm:** Mô tả tự do ('1 năm', 'junior', '1-2 yrs') không có cấu trúc đồng nhất", 0),
+        ("**Trùng lặp:** Cùng một tin tuyển dụng được đăng lại trên nhiều nguồn hoặc nhiều ngày", 0),
+    ]
+    for text, _ in problems:
+        p = tf_l.add_paragraph()
+        _rich_para(p, text, 14, INK, BLUE)
+        p.space_before = Pt(10)
+
+    # Cột phải: Cách xử lý
+    right_box = s7.shapes.add_textbox(Inches(6.8), Inches(1.35), Inches(5.9), Inches(5.3))
+    tf_r = right_box.text_frame
+    tf_r.word_wrap = True
+    p2 = tf_r.paragraphs[0]
+    p2.text = "Cách xử lý"
+    _r(p2.runs[0], 18, BLUE, bold=True)
+
+    solutions = [
+        ("**SalaryParser**: 6 regex nhận diện 8 cấu trúc; USD→VND ×25.000; lương năm ô12; 'tđi X' ×0.7, 'tủ X' ×1.3", 0),
+        ("**SkillNormalizer**: 188 quy tạc đồng nghía → 45 kị näng chuẫn; fuzzy matching >0.8", 0),
+        ("**ExperienceNormalizer**: 6 regex TV/EN → 5 bặc (entry → lead); gán -1 cho giá trị thiếu", 0),
+        ("**Deduplicator**: 4 pha (job_id, title+company, fuzzy title, fuzzy desc) → loᨑi 70 bản ghi trùng", 0),
+    ]
+    for text, _ in solutions:
+        p = tf_r.add_paragraph()
+        _rich_para(p, text, 14, INK, BLUE)
+        p.space_before = Pt(10)
+
+    # 8. Cleaning — Chart
+    s8 = new_slide(prs)
+    add_title_bar(s8, "Làm sạch — Chart dữ liệu thực tế", num=8)
+
+    _add_pic(s8, CHARTS_DIR / "missing_values.png", 0.6, 1.35, 6.0, 4.0,
+             "Tỷ lệ giá trị thiếu theo cột — salary_max và min_experience thiếu nhiều nhất do tin ẩn lương và mô tả tự do", cap_w=6.0)
+    _add_pic(s8, CHARTS_DIR / "experience_years.png", 7.0, 1.35, 6.0, 4.0,
+             "Phân bố số năm kinh nghiệm — đỉnh ở 1-3 năm, phần lớn tin tuyển dụng thuộc cấp độ Junior và Mid-level", cap_w=6.0)
+
+    # Thêm insight bên dưới
+    insight_box = s8.shapes.add_textbox(Inches(0.6), Inches(5.6), Inches(12.1), Inches(1.2))
+    tf_i = insight_box.text_frame
+    tf_i.word_wrap = True
+    p_i = tf_i.paragraphs[0]
+    _rich_para(p_i, "**Insight:** Sự thiếu hụt dữ liệu nghiêm trọng ở lương và kinh nghiệm chính là động lực cốt lõi để xây dựng các bộ SalaryParser và ExperienceNormalizer nhằm tạo ra tập dữ liệu chuẩn cho ML.", 16, INK, BLUE)
+    p_i.alignment = PP_ALIGN.CENTER
+
+    # 9. Feature engineering
     add_content_slide(prs, "Feature Engineering", [
         ("**3 nhóm đặc trưng** trong ColumnTransformer [3]:", 0),
         ("Numeric (experience_years): điền giá trị thiếu bằng trung vị rồi chuẩn hóa về phân phối chuẩn", 1),
@@ -482,18 +532,18 @@ def build():
         ("Chia dữ liệu 80/20 và đánh giá 5-fold cross-validation để ước lượng độ ổn định của mô hình", 0),
     ], num=8)
 
-    # 9. Dữ liệu tổng quan
-    s9 = add_table_slide(prs, "Dữ liệu sau xử lý", CH2_STATS_TABLE, num=9, col_widths=[7, 5.1],
+    # 10. Dữ liệu tổng quan
+    s10 = add_table_slide(prs, "Dữ liệu sau xử lý", CH2_STATS_TABLE, num=10, col_widths=[7, 5.1],
                          note="1.193 tin tuyển dụng · 44 thuộc tính · 4 nguồn tuyển dụng chính tại Việt Nam",
                          note_top=6.9)
-    _stat_cards(s9, [
+    _stat_cards(s10, [
         {"emoji": "🗂️", "value": "1.193", "label": "tin tuyển dụng"},
         {"emoji": "🌐", "value": "4", "label": "nguồn dữ liệu"},
         {"emoji": "🔒", "value": "56%", "label": "tin ẩn lương"},
         {"emoji": "🧩", "value": "6.6%", "label": "độ phủ kỹ năng"},
     ], top=5.35)
 
-    # 9. EDA
+    # 11. EDA
     add_content_slide(prs, "Phân tích khám phá dữ liệu (EDA)", [
         ("**F1 — Nhóm kỹ năng** Data Science & Lập trình xuất hiện nhiều nhất trong 1.193 tin", 0),
         ("Top kỹ năng được yêu cầu: JavaScript, React, Kafka, Python, SQL, Docker, Spring Boot, TensorFlow", 1),
@@ -501,9 +551,9 @@ def build():
         ("TP.HCM & Hà Nội có lương trung bình cao hơn rõ rệt so với các thành phố khác", 1),
         ("**F3 — Yêu cầu tiếng Anh:** lương trung bình của tin yêu cầu tiếng Anh cao hơn ~30%", 0),
         ("**F4 — Vị trí cấp cao** (Senior, Manager, Lead) ẩn lương với tỷ lệ >50%", 0),
-    ], num=10)
+    ], num=11)
 
-    # 11. EDA — Chart
+    # 12. EDA — Chart
     add_chart_slide(prs, "EDA — Chart chi tiết", [
         {"name": "skill_group_dist", "file": "skill_group_dist.png", "wide": True,
          "caption": "Tỷ lệ tin tuyển dụng theo từng nhóm kỹ năng"},
@@ -511,78 +561,78 @@ def build():
          "caption": "20 kỹ năng được nhà tuyển dụng yêu cầu nhiều nhất"},
         {"name": "salary_english", "file": "salary_english.png",
          "caption": "Lương trung bình ở tin có và không yêu cầu tiếng Anh"},
-    ], num=11)
+    ], num=12)
 
-    # 12. Kết quả Supervised
-    add_table_slide(prs, "Kết quả mô hình dự báo lương", ML_RESULTS_TABLE, num=12,
+    # 13. Kết quả Supervised
+    add_table_slide(prs, "Kết quả mô hình dự báo lương", ML_RESULTS_TABLE, num=13,
                     col_widths=[4.5, 2.5, 2.5, 2.6],
                     note="Linear giảm RMSE 53.5%, Decision Tree giảm 93.3% so với Baseline trung bình. 12 sai số lớn nhất đều dưới 2.1 triệu VND. Residual phân bố quanh mức 0 (std ≈ 0.6M) nên dự đoán không thiên lệch. Random Forest học vẹt (overfit) trên tập dữ liệu hiện tại.")
 
-    # 13. SHAP — Decision Tree
+    # 14. SHAP — Decision Tree
     add_shap_slide(prs, "SHAP — Giải thích mô hình Decision Tree", "shap_tree_summary.png",
                    "SHAP summary plot (nguồn: scripts/generate_shap_plots.py)", [
         ("**TreeExplainer** tính đóng góp của 21 đặc trưng cho từng tin trong 105 tin kiểm thử (20% tập dữ liệu)", 0),
         ("**experience_years** và nhóm kỹ năng đóng góp lớn nhất — kinh nghiệm là yếu tố quyết định mức lương", 0),
         ("Đỏ đẩy lương lên, xanh kéo lương xuống — độ trải rộng của điểm màu phản ánh tác động phi tuyến của Decision Tree", 0),
-    ], num=13)
+    ], num=14)
 
-    # 14. Kết quả ML — Chart
+    # 15. Kết quả ML — Chart
     add_chart_slide(prs, "Kết quả ML — Chart", [
         {"name": "residuals", "file": "residuals.png",
          "caption": "Sai số dự đoán (residual) phân bố quanh mức 0"},
         {"name": "model_compare", "file": "model_compare.png",
          "caption": "So sánh độ chính xác RMSE, MAE, R² giữa 4 mô hình"},
-    ], num=14)
+    ], num=15)
 
-    # 15. K-Means
-    add_table_slide(prs, "Phân cụm thị trường (K-Means)", CH3_CLUSTER_TABLE, num=15,
+    # 16. K-Means
+    add_table_slide(prs, "Phân cụm thị trường (K-Means)", CH3_CLUSTER_TABLE, num=16,
                     col_widths=[1.5, 1.5, 1.8, 2.2, 5.1],
                     note="Khảo sát số cụm k từ 2 đến 10, chọn k = 10 với Silhouette Score 0.38. Năm phân khúc đặc trưng: Junior-Mid Hà Nội 15.1M, Mid-Senior TP.HCM 27.1M, Senior 41.9M, Mid đa dạng 20.8M, Remote 31.6M.")
 
-    # 16. K-Means — Chart
+    # 17. K-Means — Chart
     add_chart_slide(prs, "K-Means — Chart phân cụm", [
         {"name": "silhouette_scores", "file": "silhouette_scores.png",
          "caption": "Silhouette Score khi khảo sát số cụm k từ 2 đến 10"},
         {"name": "pca_2d_clusters", "file": "pca_2d_clusters.png",
          "caption": "10 cụm thị trường nhìn trên không gian 2 chiều sau PCA"},
-    ], num=16)
+    ], num=17)
 
-    # 17. SHAP — Linear
+    # 18. SHAP — Linear
     add_shap_slide(prs, "SHAP — Giải thích mô hình Linear Regression", "shap_linear_summary.png",
                    "SHAP summary plot (nguồn: scripts/generate_shap_plots.py)", [
         ("**LinearExplainer** tính SHAP bằng hệ số nhân giá trị đặc trưng — quan hệ 1:1, dễ đọc trên 105 tin kiểm thử", 0),
         ("Các đặc trưng quan trọng nhất **khớp với Decision Tree** — kết quả ổn định giữa 2 mô hình", 0),
         ("Độ lớn SHAP là đóng góp tuyệt đối vào lương (triệu VND) — so sánh trực tiếp được độ quan trọng giữa các đặc trưng", 0),
-    ], num=17)
+    ], num=18)
 
-    # 18. Recommendation
-    add_table_slide(prs, "Hệ thống gợi ý việc làm (Content-based)", CH3_REC_TABLE, num=18,
+    # 19. Recommendation
+    add_table_slide(prs, "Hệ thống gợi ý việc làm (Content-based)", CH3_REC_TABLE, num=19,
                     col_widths=[3.2, 1.8, 4.1, 3.0],
                     note="Kỹ năng được mã hóa thành ma trận 1500 việc × 45 kỹ năng. Hệ thống lọc theo thành phố và kinh nghiệm ±0.5 năm trước khi tính cosine để giảm nhiễu. Demo hồ sơ [Python, SQL, Machine Learning] → Top-3: Data Scientist 1.0, ML Engineer 0.67, Data Engineer 0.67.")
 
-    # 19. Recommendation — Chart
+    # 20. Recommendation — Chart
     add_chart_slide(prs, "Gợi ý — Chart similarity", [
         {"name": "similarity_dist", "file": "similarity_dist.png",
          "caption": "Điểm tương đồng (similarity) giữa hồ sơ demo và các việc trong kho"},
-    ], num=19)
+    ], num=20)
 
-    # 20. Kết luận
-    s20 = add_content_slide(prs, "Kết luận", [
+    # 21. Kết luận
+    s21 = add_content_slide(prs, "Kết luận", [
         ("Pipeline khoa học dữ liệu end-to-end hoàn chỉnh, đáp ứng đủ các tiêu chí của học phần", 0),
         ("**Hồi quy:** RMSE giảm từ 8.97 (Baseline) xuống 4.17 (Linear, R² 0.783) rồi 0.60 (Decision Tree, R² 0.996)", 0),
         ("**SHAP xác nhận** kinh nghiệm và nhóm kỹ năng là nhân tố chính quyết định lương, nhất quán giữa 2 mô hình", 0),
         ("**K-Means** k = 10 (Silhouette 0.38) nhận diện 5 phân khúc thị trường rõ rệt", 0),
         ("**Content-based** gợi ý Top-3 việc phù hợp kèm kỹ năng còn thiếu", 0),
         ("Toàn bộ RQ1-RQ5 được trả lời qua EDA (F1-F4), SHAP và hệ gợi ý", 0),
-    ], num=20)
-    _stat_cards(s20, [
+    ], num=21)
+    _stat_cards(s21, [
         {"emoji": "🎯", "value": "RMSE 0.60", "label": "Decision Tree"},
         {"emoji": "📈", "value": "R² 0.996", "label": "Decision Tree"},
         {"emoji": "💎", "value": "0.38", "label": "Silhouette k=10"},
         {"emoji": "🎖️", "value": "Top-3", "label": "việc phù hợp"},
     ], top=6.55, size=24)
 
-    # 21. Hạn chế & Hướng phát triển
+    # 22. Hạn chế & Hướng phát triển
     add_content_slide(prs, "Hạn chế & Hướng phát triển", [
         ("**Hạn chế của dữ liệu và mô hình:**", 0),
         ("Kỹ năng chi tiết chỉ xuất hiện trong 6.6% tin — giới hạn từ nguồn dữ liệu, ảnh hưởng đến độ chính xác của đặc trưng kỹ năng", 1),
@@ -592,9 +642,9 @@ def build():
         ("Crawler truy cập sâu vào trang chi tiết từng tin, mở rộng số nguồn và cập nhật dữ liệu theo thời gian", 1),
         ("Dùng NLP/BERT trích xuất đặc trưng ngữ nghĩa từ mô tả công việc — tận dụng nguồn thông tin thay cho kỹ năng bị ẩn", 1),
         ("Thử DBSCAN / Hierarchical Clustering và Hybrid Recommendation (collaborative + content-based)", 1),
-    ], num=21)
+    ], num=22)
 
-    # 19. Cảm ơn
+    # 23. Cảm ơn
     add_thanks_slide(prs)
 
     prs.save(OUTPUT_PPTX)
@@ -607,8 +657,8 @@ def verify():
     slides = list(prs.slides)
     n = len(slides)
     issues = []
-    if n != 22:
-        issues.append(f"Số slide = {n}, mong đợi 22")
+    if n != 23:
+        issues.append(f"Số slide = {n}, mong đợi 23")
     # Mỗi slide có text
     for i, s in enumerate(slides, 1):
         texts = []
@@ -618,23 +668,23 @@ def verify():
         if not texts:
             issues.append(f"Slide {i} không có nội dung")
     # Bảng ML 5×4 ở slide 12
-    slide12 = slides[11]
-    tbls = [sh.table for sh in slide12.shapes if sh.has_table]
+    slide13 = slides[12]
+    tbls = [sh.table for sh in slide13.shapes if sh.has_table]
     if not tbls or len(tbls[0].rows) != 5 or len(tbls[0].columns) != 4:
-        issues.append("Slide 12 thiếu bảng ML 5×4")
+        issues.append("Slide 13 thiếu bảng ML 5×4")
     # Bảng thống kê 7×2 ở slide 9
-    slide9 = slides[8]
-    tbls9 = [sh.table for sh in slide9.shapes if sh.has_table]
+    slide10 = slides[9]
+    tbls9 = [sh.table for sh in slide10.shapes if sh.has_table]
     if not tbls9 or len(tbls9[0].rows) != 7 or len(tbls9[0].columns) != 2:
-        issues.append("Slide 9 thiếu bảng thống kê 7×2")
+        issues.append("Slide 10 thiếu bảng thống kê 7×2")
     # Bảng cluster 6×5 ở slide 15
-    slide15 = slides[14]
-    tbls15 = [sh.table for sh in slide15.shapes if sh.has_table]
+    slide16 = slides[15]
+    tbls15 = [sh.table for sh in slide16.shapes if sh.has_table]
     if not tbls15 or len(tbls15[0].rows) != 6 or len(tbls15[0].columns) != 5:
-        issues.append("Slide 15 thiếu bảng cluster 6×5")
+        issues.append("Slide 16 thiếu bảng cluster 6×5")
     # Chart + SHAP: slide 7, 11, 13, 14, 16, 19 mỗi slide ≥ 1 ảnh; tổng ≥ 12 ảnh
     from pptx.enum.shapes import MSO_SHAPE_TYPE
-    chart_slides = {6, 10, 12, 13, 15, 18}
+    chart_slides = {7, 11, 13, 14, 16, 19}
     total_pics = 0
     for i, s in enumerate(slides, 1):
         pics = [sh for sh in s.shapes if sh.shape_type == MSO_SHAPE_TYPE.PICTURE]
@@ -649,7 +699,7 @@ def verify():
     if total_pics < 12:
         issues.append(f"Tổng ảnh chart = {total_pics}, mong đợi ≥ 12")
     # Ảnh SHAP (2 slide)
-    for idx in (12, 16):  # slide 13, 17
+    for idx in (13, 17):  # slide 14, 18
         pics = [sh for sh in slides[idx].shapes if sh.shape_type == MSO_SHAPE_TYPE.PICTURE]
         if not pics:
             issues.append(f"Slide {idx + 1} thiếu ảnh SHAP")

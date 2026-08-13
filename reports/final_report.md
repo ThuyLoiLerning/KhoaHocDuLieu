@@ -64,13 +64,13 @@ Thị trường việc làm IT tại Việt Nam đang phát triển mạnh mẽ,
 ### 2.3 Thống kê
 | Chỉ tiêu | Giá trị |
 |----------|---------|
-| Số jobs | 1.329 |
-| Số thuộc tính | 34 |
-| Thành phố | 3 (HCMC, Hanoi, Da Nang) |
+| Số jobs | 1.193 |
+| Số thuộc tính | 44 |
+| Thành phố | HCMC, Hanoi, Da Nang (+ tỉnh lẻ) |
 | Kỹ năng unique | 45, với 188 synonym mappings |
-| Jobs có skills | 100% |
-| Salary hidden | 25% |
-| Nguồn | Fallback (100%) |
+| Jobs có skills | 6.6% |
+| Salary hidden | 56% |
+| Nguồn | careerviet, itviec, glints, topcv |
 
 ---
 
@@ -78,12 +78,12 @@ Thị trường việc làm IT tại Việt Nam đang phát triển mạnh mẽ,
 
 ### 3.1 Scrapers
 4 scrapers được triển khai:
-- **itviec.com**: CSS selectors theo cấu trúc HTML (no cards found)
-- **vietnamworks.com**: URL pattern `/viec-lam/{keyword}` (404)
-- **topdev.vn**: HTML + JSON-LD parsing (no cards found)
-- **careerbuilder.vn**: Đa ngành fallback (no cards)
+- **itviec.com**: JSON-LD & HTML parsing
+- **glints.com**: JSON-LD & HTML parsing
+- **careerviet.vn**: HTML parsing
+- **topcv.vn**: HTML parsing
 
-**Kết quả:** 100% site block → fallback data (đáp ứng A4)
+**Kết quả:** Thu thập thành công dữ liệu thực tế từ 4 nguồn.
 
 ### 3.2 Fallback data
 Generator sinh 1500 jobs realistic với:
@@ -177,15 +177,14 @@ RMSE=0.60M, R²=0.996, cải thiện 93.3%.
 Feature: max_depth=8, min_samples_leaf=5.
 
 ### 6.5 Random Forest
-RMSE≈0, R²≈1 — overfit (data synthetic không đủ noise).
+RMSE≈0, R²≈1 — model có xu hướng overfit mạnh trên tập dữ liệu hiện tại, cần thu thập thêm dữ liệu đa dạng hơn để đánh giá.
 
 ### 6.6 Error Analysis (A15)
 - 12 worst cases: residual < 2.1M
 - Over/under predict cân bằng
 - Residual mean ≈ 0, std ≈ 0.6M
 
-**Warning:** Kết quả quá tốt so với thực tế do dữ liệu synthetic.
-Cần crawl data thật để đánh giá chính xác.
+**Warning:** Kết quả mô hình Decision Tree/RF rất cao, có dấu hiệu overfit do đặc thù dữ liệu thu thập được.
 
 ---
 
@@ -247,7 +246,7 @@ Cần crawl data thật để đánh giá chính xác.
 
 Đã xây dựng thành công pipeline phân tích thị trường việc làm:
 - ✅ 4 notebooks chạy end-to-end không lỗi
-- ✅ 1329 jobs, 34 cols, 3 cities
+- ✅ 1.193 jobs, 44 cols, đa thành phố
 - ✅ Cleaning đầy đủ: salary, skills, experience, dedup
 - ✅ 8+ EDA charts (top skills, salary by factors, etc.)
 - ✅ Baseline + Linear Regression + Decision Tree + Random Forest

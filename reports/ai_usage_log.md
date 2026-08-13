@@ -7,7 +7,7 @@
 | 1 | "Đọc nội dung file assignment" | Toàn bộ text yêu cầu chuyên đề 4 | So sánh với PDF gốc | OK giữ nguyên |
 | 2 | "Liệt kê tất cả yêu cầu chuyên đề 4" | ~70+ requirements trong 14 groups A-N | Đối chiếu với đề gốc từng mục | OK giữ nguyên |
 | 3 | "Tạo plan 8 buổi" | Lộ trình chi tiết từng buổi | Xem xét khả thi với 2 member | Điều chỉnh phân công lại member |
-| 4 | "Thay dữ liệu giả bằng cào thật" | Cấu trúc scrapers cho 4 site | Test từng scraper on/offline | Thêm delay, user-agent, fallback |
+| 4 | "Thay dữ liệu giả bằng cào thật" | Cấu trúc Crawler v2 (Fetchers, Normalizer, Pipeline) | Test thực tế trên 4 sites | Thêm xử lý JSON-LD, __NEXT_DATA__, HTML fallback |
 | 5 | "Tạo JobPosting/Skill/Company OOP" | Code dataclasses | Chạy test, kiểm tra fields theo đề | Thêm __post_init__ normalization |
 | 6 | "Tạo SalaryParser regex patterns" | 6 patterns + test cases | Chạy test_salary_parser.py | Thêm pattern USD/$/năm, swap min-max |
 | 7 | "Tạo SkillNormalizer synonym map" | 35+ mapping entries | Chạy test_skill_normalizer.py | Thêm fuzzy match khi không exact |
