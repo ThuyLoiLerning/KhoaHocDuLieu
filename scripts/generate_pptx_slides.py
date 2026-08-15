@@ -128,12 +128,23 @@ def add_title_bar(slide, title, num=None):
     bar.fill.solid()
     bar.fill.fore_color.rgb = BLUE
     bar.line.fill.background()
-    # Badge section (bỏ qua nếu không có num)
+    # Badge section tự động dựa trên số slide
     if num:
-        for rng, label_b in SECTION_BADGES.items():
-            if num in rng:
-                _badge(slide, label_b)
-                break
+        badge_text = ""
+        if num == 2:
+            badge_text = "TỔNG QUAN"
+        elif 3 <= num <= 4:
+            badge_text = "GIỚI THIỆU"
+        elif 5 <= num <= 9:
+            badge_text = "PHƯƠNG PHÁP"
+        elif 10 <= num <= 12:
+            badge_text = "PHÂN TÍCH EDA"
+        elif 13 <= num <= 20:
+            badge_text = "KẾT QUẢ ML"
+        elif 21 <= num <= 23:
+            badge_text = "KẾT LUẬN"
+        if badge_text:
+            _badge(slide, badge_text)
     return tb
 
 
@@ -350,6 +361,37 @@ def add_content_slide(prs, title, bullets, num=None):
     slide = new_slide(prs)
     add_title_bar(slide, title, num)
     add_bullets(slide, bullets)
+    return slide
+
+def add_two_col_slide(prs, title, left_title, left_bullets, right_title, right_bullets, num=None):
+    slide = new_slide(prs)
+    add_title_bar(slide, title, num)
+
+    # Left column
+    left_box = slide.shapes.add_textbox(Inches(0.6), Inches(1.35), Inches(6.0), Inches(5.3))
+    tf_l = left_box.text_frame
+    tf_l.word_wrap = True
+    p_l_title = tf_l.paragraphs[0]
+    p_l_title.text = left_title
+    _r(p_l_title.runs[0], 18, BLUE, bold=True)
+    for text, level in left_bullets:
+        p = tf_l.add_paragraph()
+        p.level = level
+        _rich_para(p, text, 14, INK, BLUE)
+        p.space_before = Pt(10)
+
+    # Right column
+    right_box = slide.shapes.add_textbox(Inches(7.0), Inches(1.35), Inches(6.0), Inches(5.3))
+    tf_r = right_box.text_frame
+    tf_r.word_wrap = True
+    p_r_title = tf_r.paragraphs[0]
+    p_r_title.text = right_title
+    _r(p_r_title.runs[0], 18, BLUE, bold=True)
+    for text, level in right_bullets:
+        p = tf_r.add_paragraph()
+        p.level = level
+        _rich_para(p, text, 14, INK, BLUE)
+        p.space_before = Pt(10)
     return slide
 
 
